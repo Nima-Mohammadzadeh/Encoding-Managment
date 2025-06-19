@@ -1,21 +1,11 @@
 [
     {
-        "Customer": "Test",
-        "Part#": "Test",
-        "Job Ticket#": "Test",
-        "PO#": "Test",
-        "Inlay Type": "Test",
-        "Label Size": "Test",
-        "Quantity": "",
-        "Status": "New"
-    },
-    {
-        "Customer": "test",
-        "Part#": "213",
-        "Job Ticket#": "3",
-        "PO#": "13",
-        "Inlay Type": "3",
-        "Label Size": "3",
+        "Customer": "Peak Technologies",
+        "Part#": "t",
+        "Job Ticket#": "t",
+        "PO#": "t",
+        "Inlay Type": "EOS-241 Paper",
+        "Label Size": "1.76 x 0.71",
         "Quantity": "",
         "Status": "New"
     }

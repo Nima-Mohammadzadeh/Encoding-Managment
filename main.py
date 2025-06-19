@@ -10,15 +10,15 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QVBoxLayout,
     QPushButton,
-    QTableWidget,
     QTableView,
     QMessageBox,
     QLineEdit,
     QFormLayout,
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QComboBox,
 )
+import qdarktheme
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, QSize, QDateTime
 from datetime import datetime
@@ -31,18 +31,24 @@ import json, os
 class NewJobDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-
+        self.base_path = os.path.dirname(os.path.abspath(__file__))
         self.setWindowTitle("Create New Job")
-        self.customer_name = QLineEdit()
+
+        self.customer_name = QComboBox()
+        self.inlay_type = QComboBox()
+        self.label_size = QComboBox()
+        self.customer_name.setInsertPolicy(QComboBox.InsertPolicy.InsertAtBottom)
+        self.customer_name.setEditable(True)
+
         self.part_number = QLineEdit()
         self.job_ticket_number = QLineEdit()
         self.po_number = QLineEdit()
-        self.inlay_type = QLineEdit()
-        self.label_size = QLineEdit()
+        
         self.qty = QLineEdit()
 
-        self.layout = QFormLayout(self)
+        self.get_lists()
 
+        self.layout = QFormLayout(self)
         self.layout.addRow("Customer:", self.customer_name)
         self.layout.addRow("Part#:", self.part_number) 
         self.layout.addRow("Job Ticket#:", self.job_ticket_number)
@@ -52,66 +58,90 @@ class NewJobDialog(QDialog):
         self.layout.addRow("Qty:", self.qty)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.button_box.accepted.connect(self.validate_and_accept)
+        self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.layout.addWidget(self.button_box)
 
-    def validate_and_accept(self):
+    def accept(self):
+        # This method now overrides the default behavior of the OK button.
+        fields_to_check = {
+            "Customer": self.customer_name.currentText(),
+            "Part#": self.part_number.text(),
+            "Job Ticket#": self.job_ticket_number.text(),
+        }
+        for field_name, value in fields_to_check.items():
+            if not value.strip(): # Use strip() to ensure whitespace isn't considered valid
+                QMessageBox.warning(self, "Validation Error", f"'{field_name}' is a required field.")
+                return # Stop the process
 
-        self._create_job_folders(self.get_data())
+        if not self.inlay_type.currentText().strip():
+            QMessageBox.warning(self, "Validation Error", "Inlay Type is a required field.")
+            return
+
+        if not self.label_size.currentText().strip():
+            QMessageBox.warning(self, "Validation Error", "Label Size is a required field.")
+            return
         
-        # Validate all required fields
-        fields = {
-            "Customer name": self.customer_name.text(),
-            "Part number": self.part_number.text(), 
-            "Job ticket number": self.job_ticket_number.text(),
-            "PO number": self.po_number.text(),
-            "Inlay type": self.inlay_type.text(),
-            "Label size": self.label_size.text(),
-            "Quantity": self.qty.text()
-        }
-        # Check for empty fields
-        for field_name, value in fields.items():
-            if not value:
-                QMessageBox.warning(self, "Validation Error", f"{field_name} is required")
-                return
-                
-        # Validate numeric fields
-        numeric_fields = {
-            "PO number": self.po_number.text(),
-            "Label size": self.label_size.text(), 
-            "Quantity": self.qty.text(),
-            "Inlay type": self.inlay_type.text()
-        }
-        
-        for field_name, value in numeric_fields.items():
-            if not value.isdigit() or int(value) <= 0:
-                QMessageBox.warning(self, "Validation Error", f"{field_name} must be a positive number")
-                return
-                
-        print("Validation passed")
-        self.accept()
+
+        # If all checks pass, we call the original accept() method to close the dialog
+        # and return a successful result.
+        super().accept()
             
 
     def get_data(self):
         return {
-            "Customer": self.customer_name.text(),
+            "Customer": self.customer_name.currentText(),
             "Part#": self.part_number.text(),
             "Job Ticket#": self.job_ticket_number.text(),
             "PO#": self.po_number.text(),
-            "Inlay Type": self.inlay_type.text(),
-            "Label Size": self.label_size.text(),
+            "Inlay Type": self.inlay_type.currentText(),
+            "Label Size": self.label_size.currentText(),
             "Qty": self.qty.text()
         }
     
+    def _populate_combo_from_file(self, combo, file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                items = [line.strip() for line in file if line.strip()]
+                combo.clear()
+                combo.addItem("")
+                combo.addItems(items)
+        except FileNotFoundError:
+            print(f"File not found: {file_path}")
+    
+    def get_lists(self):
+        try:
+            # Try to load from the files in the current directory
+            self._populate_combo_from_file(self.customer_name, os.path.join(self.base_path, "Customer_names.txt"))
+            self._populate_combo_from_file(self.inlay_type, os.path.join(self.base_path, "Inlay_types.txt"))
+            self._populate_combo_from_file(self.label_size, os.path.join(self.base_path, "Label_sizes.txt"))
+            
+            # Verify the combos were populated
+            if self.customer_name.count() <= 1:  # Only has empty item
+                print("Warning: Customer names combo box is empty")
+            if self.inlay_type.count() <= 1:
+                print("Warning: Inlay types combo box is empty")
+            if self.label_size.count() <= 1:
+                print("Warning: Label sizes combo box is empty")
+                
+        except Exception as e:
+            print(f"Error loading combo box data: {e}")
+            # Show error to user
+            QMessageBox.warning(
+                self,
+                "Loading Error",
+                f"There was an error loading the dropdown menus: {str(e)}\n"
+                f"Base path used: {self.base_path}"
+            )
+
     def set_data(self, data):
         """Fills the dialog's fields with data from an existing job."""
-        self.customer_name.setText(data.get("Customer", ""))
+        self.customer_name.setCurrentText(data.get("Customer", ""))
         self.part_number.setText(data.get("Part#", ""))
         self.job_ticket_number.setText(data.get("Job Ticket#", ""))
         self.po_number.setText(data.get("PO#", ""))
-        self.inlay_type.setText(data.get("Inlay Type", ""))
-        self.label_size.setText(data.get("Label Size", ""))
+        self.inlay_type.setCurrentText(data.get("Inlay Type", ""))
+        self.label_size.setCurrentText(data.get("Label Size", ""))
         self.qty.setText(data.get("Qty", ""))
 
     
@@ -196,6 +226,8 @@ class JobPageWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.save_file = "jobs.json"
+        self.base_path = os.path.dirname(os.path.abspath(__file__))
+        self.network_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
         layout = QVBoxLayout(self)
 
 
@@ -218,20 +250,26 @@ class JobPageWidget(QWidget):
 
         self.model = QStandardItemModel()
         self.headers = ([
-        "Customer", "Part#", "Job Ticket#", "PO#", "Inlay Type", "Label Size", "Quantity", "Status"
+        "Customer", "Part#", "Job Ticket#", "PO#",
+         "Inlay Type", "Label Size", "Quantity", "Status"
         ])      
         self.model.setHorizontalHeaderLabels(self.headers)
 
         self.jobs_table = QTableView()
-        self.jobs_table.setModel(self.model)
 
+        from PySide6.QtWidgets import QHeaderView, QSizePolicy, QAbstractItemView
+        from PySide6.QtCore import QAbstractItemModel
+
+        self.jobs_table.setModel(self.model)
+        self.jobs_table.setSizePolicy(QSizePolicy.Policy.Expanding,
+    QSizePolicy.Policy.Expanding)
         self.jobs_table.setAlternatingRowColors(True)
         self.jobs_table.setSortingEnabled(True)
         
-        from PySide6.QtWidgets import QHeaderView, QSizePolicy
+        self.jobs_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.jobs_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.jobs_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
-        self.jobs_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        
         header = self.jobs_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         
@@ -247,12 +285,9 @@ class JobPageWidget(QWidget):
         layout.addWidget(self.jobs_table)
         self.setLayout(layout)
 
-
-
         self.jobs_table.selectionModel().selectionChanged.connect(self.update_button_states)
         self.update_button_states()
         self.load_jobs()
-
 
     def update_button_states(self):
         has_selection = bool(self.jobs_table.selectionModel().selectedRows())
@@ -301,45 +336,46 @@ class JobPageWidget(QWidget):
 
 
     def _create_job_folders(self, job_data):
-       
-       
-        # Get the current date in the required format
-
         try:
+            if not os.path.exists(self.network_path):
+                QMessageBox.critical(self, "Error", f"Network path not accessible: {self.network_path}\nPlease make sure you have access to the Z: drive.")
+                return
+
             current_date = datetime.now().strftime("%y-%m-%d")
-            
             po_num = job_data.get("PO#", "UnknownPO")
             job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
-            inlay_type = job_data.get("Inlay Type", "UnknownInlayType")
-            label_size = job_data.get("Label Size", "UnknownLabelSize")
             customer = job_data.get("Customer", "UnknownCustomer")
+            label_size = job_data.get("Label Size", "UnknownLabelSize")
             
-            # Create the job folder name in the required format
+            # Sanitize folder names to remove invalid characters
+            customer = "".join(c for c in customer if c.isalnum() or c in " ._-")
+            label_size = "".join(c for c in label_size if c.isalnum() or c in " ._-")        
             job_folder_name = f"{current_date}- PO{po_num} - {job_ticket_num}"
-            
-            # Create the full path:
-            # customer_name/label_size/job_folder
-            base_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
-            customer = job_data.get("Customer", "UnknownCustomer")
-            label_size = job_data.get("Label Size", "UnknownLabelSize")
 
-            customer = "".join(c for c in customer if c.isalnum() or c in "._-")
-            label_size = "".join(c for c in label_size if c.isalnum() or c in "._-")
-            job_path = os.path.join(base_path, customer, label_size, job_folder_name)
+            # Check if customer and label size folders exist
+            customer_path = os.path.join(self.network_path, customer)
+            label_size_path = os.path.join(customer_path, label_size)
             
-            # Create the directory
-            os.makedirs(job_path, exist_ok=True)
-            print(f"Created job folder: {job_path}")
-
-            QMessageBox.information(self, "Job Folder Created", f"Job folder created at: {job_path}")
+            if not os.path.exists(customer_path):
+                QMessageBox.critical(self, "Error", f"Customer folder not found: {customer}\nPlease make sure the customer folder exists in the network drive.")
+                return
+                
+            if not os.path.exists(label_size_path):
+                QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\nPlease make sure the label size folder exists in the customer directory.")
+                return
+            
+            # Create the job folder
+            job_path = os.path.join(label_size_path, job_folder_name)
+            if os.path.exists(job_path):
+                QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
+                return
+                
+            os.makedirs(job_path)
+            print(f"Successfully created job folder: {job_path}")
+            QMessageBox.information(self, "Success", f"Job folder created at:\n{job_path}")
         except Exception as e:
-                print(f"Error creating job folder: {e}")
-                QMessageBox.critical(self, "Error", f"Error creating job folder: {e}")
-
-
-
-
-
+            print(f"Error creating job folder: {e}")
+            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
 
 
     def open_new_job_dialog(self):
@@ -349,8 +385,12 @@ class JobPageWidget(QWidget):
             job_data = dialog.get_data()
             print("New Job Created:", job_data)
             self.add_job_to_table(job_data)
+            print("job added to table")
+
+            self._create_job_folders(job_data)
         else:
-            print("Job creation cancelled")
+            print("job not created")        
+
 
     def add_job_to_table(self, job_data, status="New"):
         row_items = [
@@ -373,7 +413,7 @@ class JobPageWidget(QWidget):
         try:
             with open(self.save_file, "r") as f:
                 data = json.load(f)
-                print("Loaded jobs:", data)
+                
             for job in data:
                 status = job.pop("Status", "")
                 self.add_job_to_table(job, status=status)
@@ -393,13 +433,16 @@ class JobPageWidget(QWidget):
         try:
             with open(self.save_file, "w") as f:
                 json.dump(data_to_save, f, indent=4)
-                print(f"Successfully saved {len(data_to_save)} jobs to {self.save_file}")
         except IOError as e:
             print(f"Error saving data: {e}")
 
 # --- Standard boilerplate to run a PySide application ---
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    qdarktheme.setup_theme("dark")
+
+
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
