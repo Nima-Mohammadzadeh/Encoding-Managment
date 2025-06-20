@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QComboBox,
+    QMenu,
 )
 import qdarktheme
 from PySide6.QtGui import QStandardItem, QStandardItemModel
@@ -235,16 +236,7 @@ class JobPageWidget(QWidget):
         self.add_job_button = QPushButton("Add Job")
         self.add_job_button.clicked.connect(self.open_new_job_dialog)
 
-
-        self.edit_job_button = QPushButton("Edit Selected Job")
-        self.edit_job_button.clicked.connect(self.edit_selected_job)
-
-        self.delete_job_button = QPushButton("Delete Selected Job")
-        self.delete_job_button.clicked.connect(self.delete_selected_job)
-
         actions_layout.addWidget(self.add_job_button)
-        actions_layout.addWidget(self.edit_job_button)
-        actions_layout.addWidget(self.delete_job_button)
         layout.addLayout(actions_layout)
 
 
@@ -285,98 +277,7 @@ class JobPageWidget(QWidget):
         layout.addWidget(self.jobs_table)
         self.setLayout(layout)
 
-        self.jobs_table.selectionModel().selectionChanged.connect(self.update_button_states)
-        self.update_button_states()
         self.load_jobs()
-
-    def update_button_states(self):
-        has_selection = bool(self.jobs_table.selectionModel().selectedRows())
-        self.edit_job_button.setEnabled(has_selection)
-        self.delete_job_button.setEnabled(has_selection)
-
-
-    def edit_selected_job(self):
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-        selected_row_index = selection_model.selectedRows()[0]
-        
-        #1. get the job data from the table
-        current_data = {}
-        for col, header in enumerate(self.headers):
-            cell_index = self.model.index(selected_row_index.row(), col)
-            current_data[header] = self.model.data(cell_index, Qt.DisplayRole)
-
-        #2. open the dialog with the current data
-        dialog = NewJobDialog(self)
-        dialog.set_data(current_data)
-
-        if dialog.exec():
-            new_data = dialog.get_data()
-            for col, header in enumerate(self.headers):
-                if header in new_data:
-                    cell_index = self.model.index(selected_row_index.row(), col)
-                    self.model.setData(cell_index, new_data[header], Qt.EditRole)
-
-    def delete_selected_job(self):
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-        reply = QMessageBox.question(self, 
-                                     "Confirmation", 
-                                     "Are you sure you want to delete this job?",
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-
-            selected_row_index = selection_model.selectedRows()[0]
-            self.model.removeRow(selected_row_index.row())
-            self.save_data()
-        
-        self.save_data()
-
-
-    def _create_job_folders(self, job_data):
-        try:
-            if not os.path.exists(self.network_path):
-                QMessageBox.critical(self, "Error", f"Network path not accessible: {self.network_path}\nPlease make sure you have access to the Z: drive.")
-                return
-
-            current_date = datetime.now().strftime("%y-%m-%d")
-            po_num = job_data.get("PO#", "UnknownPO")
-            job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
-            customer = job_data.get("Customer", "UnknownCustomer")
-            label_size = job_data.get("Label Size", "UnknownLabelSize")
-            
-            # Sanitize folder names to remove invalid characters
-            customer = "".join(c for c in customer if c.isalnum() or c in " ._-")
-            label_size = "".join(c for c in label_size if c.isalnum() or c in " ._-")        
-            job_folder_name = f"{current_date}- PO{po_num} - {job_ticket_num}"
-
-            # Check if customer and label size folders exist
-            customer_path = os.path.join(self.network_path, customer)
-            label_size_path = os.path.join(customer_path, label_size)
-            
-            if not os.path.exists(customer_path):
-                QMessageBox.critical(self, "Error", f"Customer folder not found: {customer}\nPlease make sure the customer folder exists in the network drive.")
-                return
-                
-            if not os.path.exists(label_size_path):
-                QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\nPlease make sure the label size folder exists in the customer directory.")
-                return
-            
-            # Create the job folder
-            job_path = os.path.join(label_size_path, job_folder_name)
-            if os.path.exists(job_path):
-                QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
-                return
-                
-            os.makedirs(job_path)
-            print(f"Successfully created job folder: {job_path}")
-            QMessageBox.information(self, "Success", f"Job folder created at:\n{job_path}")
-        except Exception as e:
-            print(f"Error creating job folder: {e}")
-            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
-
 
     def open_new_job_dialog(self):
         dialog = NewJobDialog(self)
@@ -434,6 +335,112 @@ class JobPageWidget(QWidget):
                 json.dump(data_to_save, f, indent=4)
         except IOError as e:
             print(f"Error saving data: {e}")
+
+    def contextMenuEvent(self, event):
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+        
+        menu = QMenu(self)
+        menu.addAction("Edit Job", self.edit_selected_job)
+        menu.addAction("Delete Job", self.delete_selected_job)
+        menu.addAction("Create Job Folder", self.create_folder_for_selected_job)
+        menu.exec(event.globalPos())
+
+    def create_folder_for_selected_job(self):
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+
+        selected_row_index = selection_model.selectedRows()[0]
+        
+        job_data = {}
+        for col, header in enumerate(self.headers):
+            cell_index = self.model.index(selected_row_index.row(), col)
+            job_data[header] = self.model.data(cell_index, Qt.DisplayRole)
+
+        self._create_job_folders(job_data)
+
+    def _create_job_folders(self, job_data):
+        try:
+            if not os.path.exists(self.network_path):
+                QMessageBox.critical(self, "Error", f"Network path not accessible: {self.network_path}\nPlease make sure you have access to the Z: drive.")
+                return
+
+            current_date = datetime.now().strftime("%y-%m-%d")
+            po_num = job_data.get("PO#", "UnknownPO")
+            job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
+            customer = job_data.get("Customer", "UnknownCustomer")
+            label_size = job_data.get("Label Size", "UnknownLabelSize")
+            
+            # Sanitize folder names to remove invalid characters
+            customer = "".join(c for c in customer if c.isalnum() or c in " ._-")
+            label_size = "".join(c for c in label_size if c.isalnum() or c in " ._-")        
+            job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
+
+            # Check if customer and label size folders exist
+            customer_path = os.path.join(self.network_path, customer)
+            label_size_path = os.path.join(customer_path, label_size)
+            
+            if not os.path.exists(customer_path):
+                QMessageBox.critical(self, "Error", f"Customer folder not found: {customer}\nPlease make sure the customer folder exists in the network drive.")
+                return
+                
+            if not os.path.exists(label_size_path):
+                QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\nPlease make sure the label size folder exists in the customer directory.")
+                return
+            
+            # Create the job folder
+            job_path = os.path.join(label_size_path, job_folder_name)
+            if os.path.exists(job_path):
+                QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
+                return
+                
+            os.makedirs(job_path)
+            print(f"Successfully created job folder: {job_path}")
+            QMessageBox.information(self, "Success", f"Job folder created at:\n{job_path}")
+        except Exception as e:
+            print(f"Error creating job folder: {e}")
+            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
+
+    def edit_selected_job(self):
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+        selected_row_index = selection_model.selectedRows()[0]
+        
+        #1. get the job data from the table
+        current_data = {}
+        for col, header in enumerate(self.headers):
+            cell_index = self.model.index(selected_row_index.row(), col)
+            current_data[header] = self.model.data(cell_index, Qt.DisplayRole)
+
+        #2. open the dialog with the current data
+        dialog = NewJobDialog(self)
+        dialog.set_data(current_data)
+
+        if dialog.exec():
+            new_data = dialog.get_data()
+            for col, header in enumerate(self.headers):
+                if header in new_data:
+                    cell_index = self.model.index(selected_row_index.row(), col)
+                    self.model.setData(cell_index, new_data[header], Qt.EditRole)
+
+    def delete_selected_job(self):
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+        reply = QMessageBox.question(self, 
+                                     "Confirmation", 
+                                     "Are you sure you want to delete this job?",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+
+            selected_row_index = selection_model.selectedRows()[0]
+            self.model.removeRow(selected_row_index.row())
+        
+        self.save_data()
+
 
 # --- Standard boilerplate to run a PySide application ---
 if __name__ == "__main__":
