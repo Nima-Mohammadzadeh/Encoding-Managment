@@ -391,7 +391,6 @@ class JobPageWidget(QWidget):
         else:
             print("job not created")        
 
-
     def add_job_to_table(self, job_data, status="New"):
         row_items = [
             QStandardItem(job_data.get("Customer", "")),
