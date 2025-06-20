@@ -72,13 +72,16 @@ class ArchivePageWidget(QWidget):
         self.save_data()
         self.load_jobs()
     
-    def delete_job(self, row_index):
+    def delete_selected_job(self):
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
         reply = QMessageBox.question(self, "Confirmation", "Are you sure you want to delete this job?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            self.model.removeRow(row_index)
-            self.save_data()
-            self.load_jobs()
+            selected_row_index = selection_model.selectedRows()[0]
+            self.model.removeRow(selected_row_index.row())
+        self.save_data()
 
     def add_job_to_table(self, job_data, status="Archived"):
         row_items = [
@@ -126,7 +129,10 @@ class ArchivePageWidget(QWidget):
             print(f"Error saving data: {e}") 
     
     def contextMenuEvent(self, event):
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return  
         menu = QMenu(self)
         menu.addAction("Move to Active", self.move_to_archive)
-        menu.addAction("Delete Job", self.delete_job)
+        menu.addAction("Delete Job", self.delete_selected_job)
         menu.exec(event.globalPos())
