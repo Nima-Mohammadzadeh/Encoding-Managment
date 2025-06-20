@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
     QTableView,
     QHeaderView,
     QSizePolicy,
-    QAbstractItemView
+    QAbstractItemView,
+    QMenu
 )
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt
@@ -123,3 +124,9 @@ class ArchivePageWidget(QWidget):
                 json.dump(data_to_save, f, indent=4)
         except IOError as e:
             print(f"Error saving data: {e}") 
+    
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.addAction("Move to Active", self.move_to_archive)
+        menu.addAction("Delete Job", self.delete_job)
+        menu.exec(event.globalPos())
