@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QAbstractItemView,
     QCheckBox,
+    QFileDialog,
+    QLabel,
 )
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
@@ -29,6 +31,9 @@ class NewJobDialog(QDialog):
         self.setWindowTitle("Create New Job")
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.setMinimumSize(500, 400)
+
+        # Initialize save location variables
+        self.custom_save_location = None
 
         # Create a vertical layout for the dialog
         self.customer_name = QComboBox()
@@ -47,9 +52,20 @@ class NewJobDialog(QDialog):
         self.Desktop_location = QCheckBox("Desktop")
         self.Browse_Button = QPushButton("Browse")
 
+        # Add a label to show selected custom path
+        self.custom_path_label = QLabel("No custom path selected")
+        self.custom_path_label.setWordWrap(True)
+        self.custom_path_label.setStyleSheet("color: gray; font-size: 10px;")
+
         # Connect checkbox signals to update browse button state
         self.SharedDrive_location.stateChanged.connect(self.update_browse_button_state)
         self.Desktop_location.stateChanged.connect(self.update_browse_button_state)
+
+        # Connect browse button to directory selection
+        self.Browse_Button.clicked.connect(self.browse_for_directory)
+
+        self.dialog = QFileDialog(self)
+        self.dialog.setFileMode(QFileDialog.FileMode.Directory)
 
         # Create horizontal layout for save location controls
         save_location_layout = QHBoxLayout()
@@ -72,6 +88,7 @@ class NewJobDialog(QDialog):
         self.layout.addRow("Label Size:", self.label_size)
         self.layout.addRow("Qty:", self.qty)
         self.layout.addRow("Save Location:", save_location_widget)
+        self.layout.addRow("", self.custom_path_label)  # Add the path label
         
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -81,6 +98,25 @@ class NewJobDialog(QDialog):
 
         # Set initial state of browse button
         self.update_browse_button_state()
+
+    def browse_for_directory(self):
+        """Open directory selection dialog and store the selected path."""
+        directory = QFileDialog.getExistingDirectory(
+            self, 
+            "Select Save Directory", 
+            "", 
+            QFileDialog.Option.ShowDirsOnly
+        )
+        
+        if directory:  # User selected a directory (didn't cancel)
+            self.custom_save_location = directory
+            self.custom_path_label.setText(f"Custom path: {directory}")
+            self.custom_path_label.setStyleSheet("color: black; font-size: 10px;")
+        else:
+            # User cancelled, keep existing selection if any
+            if not self.custom_save_location:
+                self.custom_path_label.setText("No custom path selected")
+                self.custom_path_label.setStyleSheet("color: gray; font-size: 10px;")
 
     def update_browse_button_state(self):
         """Enable/disable browse button based on checkbox states."""
@@ -111,7 +147,42 @@ class NewJobDialog(QDialog):
             QMessageBox.warning(self, "Validation Error", "Label Size is a required field.")
             return
         
+        # Handle save location logic
+        self.save_location = None
+        self.save_location1 = None
+        self.save_location2 = None
+        
+        if self.Desktop_location.isChecked() and self.SharedDrive_location.isChecked():
+            self.save_location1 = "Z:\\3 Encoding and Printing Files\\Customers Encoding Files"
+            self.save_location2 = os.path.expanduser("~/Desktop")
+        elif self.Desktop_location.isChecked():
+            self.save_location = os.path.expanduser("~/Desktop")
+        elif self.SharedDrive_location.isChecked():
+            self.save_location = "Z:\\3 Encoding and Printing Files\\Customers Encoding Files"
+        elif self.custom_save_location:
+            self.save_location = self.custom_save_location
+        else:
+            QMessageBox.warning(self, "Validation Error", "Please select a save location.")
+            return
+            
+        # Validate that we have at least one save location
+        if not self.save_location and not (self.save_location1 and self.save_location2):
+            QMessageBox.warning(self, "Validation Error", "Save location is required.")
+            return
+            
+        if self.save_location:
+            self.save_location = self.save_location.strip()
+        
         super().accept()
+
+    def get_save_locations(self):
+        """Get the configured save location(s) for use by calling code."""
+        if hasattr(self, 'save_location1') and hasattr(self, 'save_location2') and self.save_location1 and self.save_location2:
+            return [self.save_location1, self.save_location2]
+        elif hasattr(self, 'save_location') and self.save_location:
+            return [self.save_location]
+        else:
+            return []
             
     def get_data(self):
         return {
@@ -216,13 +287,17 @@ class JobPageWidget(QWidget):
 
         if dialog.exec():
             job_data = dialog.get_data()
+            save_locations = dialog.get_save_locations()
+            
             print("New Job Created:", job_data)
+            print("Save location(s):", save_locations)
+            
             self.add_job_to_table(job_data)
             print("job added to table")
 
-            self._create_job_folders(job_data)
+            self._create_job_folders(job_data, save_locations)
         else:
-            print("job not created")        
+            print("job not created")
 
     def add_job_to_table(self, job_data, status="New"):
         row_items = [
@@ -316,14 +391,15 @@ class JobPageWidget(QWidget):
             cell_index = self.model.index(selected_row_index.row(), col)
             job_data[header] = self.model.data(cell_index, Qt.DisplayRole)
 
-        self._create_job_folders(job_data)
+        # Use default network path for context menu folder creation
+        self._create_job_folders(job_data, [self.network_path])
 
-    def _create_job_folders(self, job_data):
+    def _create_job_folders(self, job_data, save_locations=None):
         try:
-            if not os.path.exists(self.network_path):
-                QMessageBox.critical(self, "Error", f"Network path not accessible: {self.network_path}\\nPlease make sure you have access to the Z: drive.")
-                return
-
+            # If no save_locations provided, fall back to the default network path
+            if not save_locations:
+                save_locations = [self.network_path]
+            
             current_date = datetime.now().strftime("%y-%m-%d")
             po_num = job_data.get("PO#", "UnknownPO")
             job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
@@ -334,28 +410,53 @@ class JobPageWidget(QWidget):
             label_size = "".join(c for c in label_size if c.isalnum() or c in " ._-")        
             job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
 
-            customer_path = os.path.join(self.network_path, customer)
-            label_size_path = os.path.join(customer_path, label_size)
+            created_folders = []
             
-            if not os.path.exists(customer_path):
-                QMessageBox.critical(self, "Error", f"Customer folder not found: {customer}\\nPlease make sure the customer folder exists in the network drive.")
-                return
+            for save_location in save_locations:
+                if not os.path.exists(save_location):
+                    QMessageBox.critical(self, "Error", f"Save location not accessible: {save_location}")
+                    continue
+                    
+                customer_path = os.path.join(save_location, customer)
+                label_size_path = os.path.join(customer_path, label_size)
                 
-            if not os.path.exists(label_size_path):
-                QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\\nPlease make sure the label size folder exists in the customer directory.")
-                return
+                # For custom paths, create the directory structure if it doesn't exist
+                if save_location != self.network_path:
+                    if not os.path.exists(customer_path):
+                        os.makedirs(customer_path)
+                        print(f"Created customer directory: {customer_path}")
+                    
+                    if not os.path.exists(label_size_path):
+                        os.makedirs(label_size_path)
+                        print(f"Created label size directory: {label_size_path}")
+                else:
+                    # For network path, require existing structure
+                    if not os.path.exists(customer_path):
+                        QMessageBox.critical(self, "Error", f"Customer folder not found: {customer}\nPlease make sure the customer folder exists in the network drive.")
+                        continue
+                        
+                    if not os.path.exists(label_size_path):
+                        QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\nPlease make sure the label size folder exists in the customer directory.")
+                        continue
+                
+                job_path = os.path.join(label_size_path, job_folder_name)
+                if os.path.exists(job_path):
+                    QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
+                    continue
+                    
+                os.makedirs(job_path)
+                created_folders.append(job_path)
+                print(f"Successfully created job folder: {job_path}")
             
-            job_path = os.path.join(label_size_path, job_folder_name)
-            if os.path.exists(job_path):
-                QMessageBox.warning(self, "Warning", f"Job folder already exists:\\n{job_path}")
-                return
+            if created_folders:
+                folder_list = "\n".join(created_folders)
+                QMessageBox.information(self, "Success", f"Job folder(s) created at:\n{folder_list}")
+            else:
+                QMessageBox.warning(self, "Warning", "No job folders were created.")
                 
-            os.makedirs(job_path)
-            print(f"Successfully created job folder: {job_path}")
-            QMessageBox.information(self, "Success", f"Job folder created at:\\n{job_path}")
         except Exception as e:
             print(f"Error creating job folder: {e}")
-            QMessageBox.critical(self, "Error", f"Could not create job folder:\\n{e}")
+            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
 
     def edit_selected_job(self):
         selection_model = self.jobs_table.selectionModel()
