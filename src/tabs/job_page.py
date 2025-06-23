@@ -512,6 +512,9 @@ class JobPageWidget(QWidget):
 
             job_data = self._get_job_data_for_row(selected_row)
             
+            # Add archive date before emitting
+            job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
             self.job_to_archive.emit(job_data)
 
             self.model.removeRow(selected_row)

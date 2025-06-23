@@ -8,5 +8,16 @@
         "Label Size": "1.76 x 0.71",
         "Quantity": "",
         "Status": "Archived"
+    },
+    {
+        "Customer": "Peak Technologies",
+        "Inlay Type": "EOS-241 Paper",
+        "Job Ticket#": "1111",
+        "Label Size": "1.76 x 0.71",
+        "PO#": "1",
+        "Part#": "12211",
+        "Quantity": "5000",
+        "Status": "New",
+        "dateArchived": "2025-06-23 00:19:29"
     }
 ]
