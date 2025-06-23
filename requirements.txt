@@ -1,2 +1,3 @@
 PySide6==6.9.1
 qt-material==2.17 
+PyMuPDF 

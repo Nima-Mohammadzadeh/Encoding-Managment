@@ -1,5 +1,3 @@
-import sys
-import os
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -9,7 +7,10 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QLabel,
     QListWidgetItem,
+    QFileDialog,
+    QMessageBox
 )
+import pymupdf, shutil, os, sys
 from qt_material import apply_stylesheet
 from PySide6.QtCore import Qt, QSize
 
@@ -22,7 +23,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("Workflow Optimizer")
-        self.setGeometry(100, 100, 900, 600)
+        self.setGeometry(50, 50, 1100, 650)
 
         # Define the base path for the application
         self.base_path = os.path.dirname(os.path.abspath(__file__))
@@ -87,7 +88,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    apply_stylesheet(app, theme='dark_teal.xml')
+    apply_stylesheet(app, theme='dark_blue.xml')
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

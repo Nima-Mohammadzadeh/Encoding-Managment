@@ -263,6 +263,7 @@ class JobPageWidget(QWidget):
         self.jobs_table = QTableView()
         self.jobs_table.setModel(self.model)
         self.jobs_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.jobs_table.setMinimumWidth(980)
         self.jobs_table.setAlternatingRowColors(True)
         self.jobs_table.setSortingEnabled(True)
         self.jobs_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -273,7 +274,10 @@ class JobPageWidget(QWidget):
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(self.headers.index("Customer"), QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(self.headers.index("Part#"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Job Ticket#"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("PO#"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Inlay Type"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Label Size"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("Quantity"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("Status"), QHeaderView.ResizeMode.ResizeToContents)
        
@@ -357,10 +361,12 @@ class JobPageWidget(QWidget):
         submenu.addAction("Cancelled", self.set_status("Cancelled"))
         submenu.addAction("Archived", self.set_status("Archived"))
 
-        menu.addAction("Edit Job", self.edit_selected_job)
-        menu.addAction("Delete Job", self.delete_selected_job)
         menu.addAction("Create Job Folder", self.create_folder_for_selected_job)
+        menu.addAction("Edit Job", self.edit_selected_job)
         menu.addAction("Move to Archive", self.move_to_archive)
+        menu.addAction("Delete Job", self.delete_selected_job)
+        
+        
         menu.addMenu(submenu)
         menu.exec(event.globalPos())
 
