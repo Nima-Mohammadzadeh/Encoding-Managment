@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidgetItem,
 )
-import qdarktheme
+from qt_material import apply_stylesheet
 from PySide6.QtCore import Qt, QSize
 
 # Import the widgets from their new locations
@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    qdarktheme.setup_theme("dark")
+    apply_stylesheet(app, theme='dark_teal.xml')
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

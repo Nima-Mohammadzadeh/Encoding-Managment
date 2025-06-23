@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QSizePolicy,
     QAbstractItemView,
+    QCheckBox,
 )
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
@@ -26,7 +27,10 @@ class NewJobDialog(QDialog):
         super().__init__(parent)
         self.base_path = base_path if base_path else os.path.dirname(os.path.abspath(__file__))
         self.setWindowTitle("Create New Job")
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.setMinimumSize(500, 400)
 
+        # Create a vertical layout for the dialog
         self.customer_name = QComboBox()
         self.inlay_type = QComboBox()
         self.label_size = QComboBox()
@@ -38,6 +42,19 @@ class NewJobDialog(QDialog):
         self.po_number = QLineEdit()
         
         self.qty = QLineEdit()
+        self.SharedDrive_location = QCheckBox("Auto search/save")
+        self.Desktop_location = QCheckBox("Desktop")
+        self.Browse_Button = QPushButton("Browse")
+
+        # Create horizontal layout for save location controls
+        save_location_layout = QHBoxLayout()
+        save_location_layout.addWidget(self.SharedDrive_location)
+        save_location_layout.addWidget(self.Desktop_location)
+        save_location_layout.addWidget(self.Browse_Button)
+        save_location_layout.addStretch()  # Pushes controls to the left
+        
+        save_location_widget = QWidget()
+        save_location_widget.setLayout(save_location_layout)
 
         self.get_lists()
 
@@ -49,6 +66,8 @@ class NewJobDialog(QDialog):
         self.layout.addRow("Inlay Type:", self.inlay_type)
         self.layout.addRow("Label Size:", self.label_size)
         self.layout.addRow("Qty:", self.qty)
+        self.layout.addRow("Save Location:", save_location_widget)
+        
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.button_box.accepted.connect(self.accept)
