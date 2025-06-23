@@ -1,1 +1,12 @@
-[]
+[
+    {
+        "Customer": "Peak Technologies",
+        "Part#": "113",
+        "Job Ticket#": "12231",
+        "PO#": "123123123",
+        "Inlay Type": "EOS-241 Paper",
+        "Label Size": "1.76 x 0.71",
+        "Quantity": "",
+        "Status": "Archived"
+    }
+]
