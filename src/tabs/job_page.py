@@ -37,14 +37,19 @@ class NewJobDialog(QDialog):
         self.customer_name.setInsertPolicy(QComboBox.InsertPolicy.InsertAtBottom)
         self.customer_name.setEditable(True)
 
+
         self.part_number = QLineEdit()
         self.job_ticket_number = QLineEdit()
         self.po_number = QLineEdit()
-        
         self.qty = QLineEdit()
+
         self.SharedDrive_location = QCheckBox("Auto search/save")
         self.Desktop_location = QCheckBox("Desktop")
         self.Browse_Button = QPushButton("Browse")
+
+        # Connect checkbox signals to update browse button state
+        self.SharedDrive_location.stateChanged.connect(self.update_browse_button_state)
+        self.Desktop_location.stateChanged.connect(self.update_browse_button_state)
 
         # Create horizontal layout for save location controls
         save_location_layout = QHBoxLayout()
@@ -73,6 +78,18 @@ class NewJobDialog(QDialog):
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.layout.addWidget(self.button_box)
+
+        # Set initial state of browse button
+        self.update_browse_button_state()
+
+    def update_browse_button_state(self):
+        """Enable/disable browse button based on checkbox states."""
+        if self.SharedDrive_location.isChecked() or self.Desktop_location.isChecked():
+            self.Browse_Button.setEnabled(False)
+            self.Browse_Button.setStyleSheet("background-color: #f0f0f0; color: #000000;")
+        else:
+            self.Browse_Button.setEnabled(True)
+            self.Browse_Button.setStyleSheet("")  # Reset to default style
 
     def accept(self):
         # This method now overrides the default behavior of the OK button.
