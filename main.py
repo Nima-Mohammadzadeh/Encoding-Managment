@@ -23,7 +23,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("Workflow Optimizer")
-        self.setGeometry(50, 50, 1100, 650)
+        self.setGeometry(50, 50, 1400, 650)
 
         # Define the base path for the application
         self.base_path = os.path.dirname(os.path.abspath(__file__))
@@ -54,6 +54,8 @@ class MainWindow(QMainWindow):
         self.add_page("Reports", QLabel("This is the Reports Page.\\n\\nCharts and data exports will live here."))
         self.add_page("Settings", QLabel("This is the Settings Page.\\n\\nApplication settings will be configured here."))
         self.add_page("Archive", self.archive_page)
+
+        
 
         # Connect signals
         self.jobs_page.job_to_archive.connect(self.archive_page.add_archived_job)

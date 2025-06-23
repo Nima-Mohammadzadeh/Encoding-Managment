@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
 )
+import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
 
@@ -263,23 +264,31 @@ class JobPageWidget(QWidget):
         self.jobs_table = QTableView()
         self.jobs_table.setModel(self.model)
         self.jobs_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.jobs_table.setMinimumWidth(980)
         self.jobs_table.setAlternatingRowColors(True)
         self.jobs_table.setSortingEnabled(True)
         self.jobs_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.jobs_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.jobs_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.jobs_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        # Define column proportions (total = 100)
+        self.column_proportions = {
+            "Customer": 25,      # 25% of space
+            "Part#": 10,        # 10% of space
+            "Job Ticket#": 15,  # 15% of space
+            "PO#": 10,         # 10% of space
+            "Inlay Type": 15,   # 15% of space
+            "Label Size": 10,   # 10% of space
+            "Quantity": 7,      # 7% of space
+            "Status": 8         # 8% of space
+        }
 
         header = self.jobs_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(self.headers.index("Customer"), QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(self.headers.index("Part#"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Job Ticket#"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("PO#"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Inlay Type"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Label Size"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Quantity"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Status"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setStretchLastSection(False)  # Don't stretch the last section
+        header.setVisible(True)
+        
+        # Connect the table's resize event to our custom resize function
+        self.jobs_table.resizeEvent = self.handle_table_resize
        
         layout.addWidget(self.jobs_table)
         self.setLayout(layout)
@@ -291,15 +300,8 @@ class JobPageWidget(QWidget):
 
         if dialog.exec():
             job_data = dialog.get_data()
-            save_locations = dialog.get_save_locations()
-            
-            print("New Job Created:", job_data)
-            print("Save location(s):", save_locations)
-            
-            self.add_job_to_table(job_data)
-            print("job added to table")
-
-            self._create_job_folders(job_data, save_locations)
+            print("New Job Made: ", job_data)
+            self.handle_new_job_creation(job_data)            
         else:
             print("job not created")
 
@@ -411,10 +413,9 @@ class JobPageWidget(QWidget):
             job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
             customer = job_data.get("Customer", "UnknownCustomer")
             label_size = job_data.get("Label Size", "UnknownLabelSize")
-            
-            customer = "".join(c for c in customer if c.isalnum() or c in " ._-")
-            label_size = "".join(c for c in label_size if c.isalnum() or c in " ._-")        
             job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
+            label_size_path = os.path.join(self.network_path, customer, label_size)
+            job_path = os.path.join(label_size_path, job_folder_name)
 
             created_folders = []
             
@@ -453,6 +454,8 @@ class JobPageWidget(QWidget):
                 os.makedirs(job_path)
                 created_folders.append(job_path)
                 print(f"Successfully created job folder: {job_path}")
+
+                return job_path
             
             if created_folders:
                 folder_list = "\n".join(created_folders)
@@ -463,6 +466,7 @@ class JobPageWidget(QWidget):
         except Exception as e:
             print(f"Error creating job folder: {e}")
             QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
+            return None
 
     def edit_selected_job(self):
         selection_model = self.jobs_table.selectionModel()
@@ -526,3 +530,77 @@ class JobPageWidget(QWidget):
             self.model.removeRow(selected_row)
             
             self.save_data() 
+
+    def handle_new_job_creation(self, job_data):
+        '''
+        This function is called when a new job is created.
+        It will create a new job folder and fill the checklist with the job data.
+        '''
+        try:
+            job_path = self._create_job_folders(job_data)
+
+            if not job_path:
+                return
+            
+            self.add_job_to_table(job_data)
+            
+            self._generate_checklist(job_data, job_path)
+
+
+            QMessageBox.information(self, "Success", "Job created successfully")
+
+        except Exception as e:
+            print(f"Error creating job folder: {e}")
+            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
+
+    def _generate_checklist(self, job_data, job_path):
+        '''
+        This function is called when a new job is created.
+        It will generate a checklist for the job.
+        '''
+        template_path = os.path.join(self.base_path, "data", "Encoding Checklist V4.1.pdf")
+
+        if not os.path.exists(template_path):
+            QMessageBox.warning(self, "Missing Template", "Could not find the PDF work order template. Skipping PDF generation.")
+            return
+        
+        fields_to_fill = {
+            "Customer": "customer",
+            "Part#": "part_num",
+            "Job Ticket#": "job_ticket",
+            "PO#": "customer_po",
+            "Inlay Type": "inlay_type",
+            "Label Size": "label_size",
+            "Quantity": "qty",
+            "Date": "Date",
+        }
+
+        output_file_name = f"{job_data.get('Customer', '')}-{job_data.get('Job Ticket#', '')}-{job_data.get('PO#', '')}-Checklist.pdf"
+        save_path = os.path.join(job_path, output_file_name)
+
+        doc = pymupdf.open(template_path)
+        for field in doc.iter_fields():
+            app_key = next((key for key in fields_to_fill if key in field.name), None)
+            if app_key and app_key in job_data:
+                field.value = job_data[app_key]
+                field.update()
+
+        doc.is_form_pdf = False
+        doc.save(save_path)
+        doc.close()
+        print(f"Checklist created successfully at:\n{save_path}")
+
+    def handle_table_resize(self, event):
+        """Handle table resize event to maintain column proportions"""
+        total_width = self.jobs_table.width()
+        header = self.jobs_table.horizontalHeader()
+        
+        # Set the width of each column based on its proportion
+        for idx, header_name in enumerate(self.headers):
+            proportion = self.column_proportions[header_name]
+            width = int(total_width * proportion / 100)
+            header.resizeSection(idx, width)
+            
+        # Accept the resize event
+        if event is not None:
+            event.accept()
