@@ -263,7 +263,6 @@ class JobPageWidget(QWidget):
 
         self.jobs_table = QTableView()
         self.jobs_table.setModel(self.model)
-        self.jobs_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.jobs_table.setAlternatingRowColors(True)
         self.jobs_table.setSortingEnabled(True)
         self.jobs_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -271,24 +270,16 @@ class JobPageWidget(QWidget):
         self.jobs_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.jobs_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Define column proportions (total = 100)
-        self.column_proportions = {
-            "Customer": 25,      # 25% of space
-            "Part#": 10,        # 10% of space
-            "Job Ticket#": 15,  # 15% of space
-            "PO#": 10,         # 10% of space
-            "Inlay Type": 15,   # 15% of space
-            "Label Size": 10,   # 10% of space
-            "Quantity": 7,      # 7% of space
-            "Status": 8         # 8% of space
-        }
-
         header = self.jobs_table.horizontalHeader()
-        header.setStretchLastSection(False)  # Don't stretch the last section
-        header.setVisible(True)
-        
-        # Connect the table's resize event to our custom resize function
-        self.jobs_table.resizeEvent = self.handle_table_resize
+        header.setSectionResizeMode(self.headers.index("Customer"), QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(self.headers.index("Part#"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Job Ticket#"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("PO#"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Inlay Type"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Label Size"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Quantity"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Status"), QHeaderView.ResizeMode.ResizeToContents)
+        self.jobs_table.verticalHeader().hide()
        
         layout.addWidget(self.jobs_table)
         self.setLayout(layout)
@@ -589,18 +580,3 @@ class JobPageWidget(QWidget):
         doc.save(save_path)
         doc.close()
         print(f"Checklist created successfully at:\n{save_path}")
-
-    def handle_table_resize(self, event):
-        """Handle table resize event to maintain column proportions"""
-        total_width = self.jobs_table.width()
-        header = self.jobs_table.horizontalHeader()
-        
-        # Set the width of each column based on its proportion
-        for idx, header_name in enumerate(self.headers):
-            proportion = self.column_proportions[header_name]
-            width = int(total_width * proportion / 100)
-            header.resizeSection(idx, width)
-            
-        # Accept the resize event
-        if event is not None:
-            event.accept()

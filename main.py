@@ -23,7 +23,8 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("Workflow Optimizer")
-        self.setGeometry(50, 50, 1400, 650)
+        self.setGeometry(50, 50, 1200, 650)
+        self.setMinimumSize(1200, 650)
 
         # Define the base path for the application
         self.base_path = os.path.dirname(os.path.abspath(__file__))
