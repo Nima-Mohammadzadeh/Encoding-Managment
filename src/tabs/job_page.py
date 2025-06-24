@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
 )
+import fitz
 import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
@@ -571,14 +572,32 @@ class JobPageWidget(QWidget):
         output_file_name = f"{job_data.get('Customer', '')}-{job_data.get('Job Ticket#', '')}-{job_data.get('PO#', '')}-Checklist.pdf"
         save_path = os.path.join(job_path, output_file_name)
 
-        doc = pymupdf.open(template_path)
-        for field in doc.iter_fields():
-            app_key = next((key for key in fields_to_fill if key in field.name), None)
-            if app_key and app_key in job_data:
-                field.value = job_data[app_key]
-                field.update()
+        
+        try:
+            doc = fitz.open(template_path)
+            for page in doc:
+                for widget in page.widgets():
+                    # First, let's find the field names in your PDF
+                    print(f"Found PDF form field: '{widget.field_name}'")
 
-        doc.is_form_pdf = False
-        doc.save(save_path)
-        doc.close()
-        print(f"Checklist created successfully at:\n{save_path}")
+                    # Now, let's try to fill it
+                    for data_key, pdf_key in fields_to_fill.items():
+                        if widget.field_name == pdf_key:
+                            value = ""
+                            if data_key == "Date":
+                                value = datetime.now().strftime('%m/%d/%Y')
+                            else:
+                                value = job_data.get(data_key, "")
+                            
+                            widget.field_value = value
+                            widget.update()
+                            break # Found and updated, move to the next widget
+            
+            # The fields are filled, now we save the document.
+            # To make fields non-editable (flatten), use garbage=4.
+            doc.save(save_path, garbage=4, deflate=True)
+            doc.close()
+            print(f"Checklist created successfully at:\n{save_path}")
+        except Exception as e:
+            print(f"Error processing PDF: {e}")
+            QMessageBox.critical(self, "PDF Error", f"Could not generate checklist PDF:\n{e}")
