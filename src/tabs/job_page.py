@@ -291,8 +291,9 @@ class JobPageWidget(QWidget):
 
         if dialog.exec():
             job_data = dialog.get_data()
+            save_locations = dialog.get_save_locations()
             print("New Job Made: ", job_data)
-            self.handle_new_job_creation(job_data)            
+            self.handle_new_job_creation(job_data, save_locations)            
         else:
             print("job not created")
 
@@ -398,15 +399,13 @@ class JobPageWidget(QWidget):
             # If no save_locations provided, fall back to the default network path
             if not save_locations:
                 save_locations = [self.network_path]
-            
+                  
             current_date = datetime.now().strftime("%y-%m-%d")
             po_num = job_data.get("PO#", "UnknownPO")
             job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
             customer = job_data.get("Customer", "UnknownCustomer")
             label_size = job_data.get("Label Size", "UnknownLabelSize")
             job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
-            label_size_path = os.path.join(self.network_path, customer, label_size)
-            job_path = os.path.join(label_size_path, job_folder_name)
 
             created_folders = []
             
@@ -417,6 +416,7 @@ class JobPageWidget(QWidget):
                     
                 customer_path = os.path.join(save_location, customer)
                 label_size_path = os.path.join(customer_path, label_size)
+                job_path = os.path.join(label_size_path, job_folder_name)
                 
                 # For custom paths, create the directory structure if it doesn't exist
                 if save_location != self.network_path:
@@ -437,7 +437,6 @@ class JobPageWidget(QWidget):
                         QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\nPlease make sure the label size folder exists in the customer directory.")
                         continue
                 
-                job_path = os.path.join(label_size_path, job_folder_name)
                 if os.path.exists(job_path):
                     QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
                     continue
@@ -446,13 +445,16 @@ class JobPageWidget(QWidget):
                 created_folders.append(job_path)
                 print(f"Successfully created job folder: {job_path}")
 
-                return job_path
+                # Return the first successfully created job path for checklist generation
+                if created_folders:
+                    return created_folders[0]
             
             if created_folders:
                 folder_list = "\n".join(created_folders)
                 QMessageBox.information(self, "Success", f"Job folder(s) created at:\n{folder_list}")
             else:
                 QMessageBox.warning(self, "Warning", "No job folders were created.")
+                return None
                 
         except Exception as e:
             print(f"Error creating job folder: {e}")
@@ -522,13 +524,13 @@ class JobPageWidget(QWidget):
             
             self.save_data() 
 
-    def handle_new_job_creation(self, job_data):
+    def handle_new_job_creation(self, job_data, save_locations):
         '''
         This function is called when a new job is created.
         It will create a new job folder and fill the checklist with the job data.
         '''
         try:
-            job_path = self._create_job_folders(job_data)
+            job_path = self._create_job_folders(job_data, save_locations)
 
             if not job_path:
                 return
