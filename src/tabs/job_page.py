@@ -565,7 +565,7 @@ class JobPageWidget(QWidget):
             "PO#": "customer_po",
             "Inlay Type": "inlay_type",
             "Label Size": "label_size",
-            "Quantity": "qty",
+            "Qty": "qty",
             "Date": "Date",
         }
 
