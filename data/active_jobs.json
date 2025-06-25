@@ -38,35 +38,5 @@
         "Label Size": "1.76 x 0.71",
         "Quantity": "",
         "Status": "New"
-    },
-    {
-        "Customer": "Peak Technologies",
-        "Part#": "12314",
-        "Job Ticket#": "12341",
-        "PO#": "1231241",
-        "Inlay Type": "EOS-241 Paper",
-        "Label Size": "1.85 x 0.91",
-        "Quantity": "",
-        "Status": "New"
-    },
-    {
-        "Customer": "Peak Technologies",
-        "Part#": "12341",
-        "Job Ticket#": "1231",
-        "PO#": "1241",
-        "Inlay Type": "EOS-241 Paper",
-        "Label Size": "1.85 x 0.91",
-        "Quantity": "",
-        "Status": "New"
-    },
-    {
-        "Customer": "Peak Technologies",
-        "Part#": "512351",
-        "Job Ticket#": "12351123",
-        "PO#": "1321251",
-        "Inlay Type": "EOS-241 Paper",
-        "Label Size": "1.85 x 0.91",
-        "Quantity": "",
-        "Status": "New"
     }
 ]
