@@ -18,6 +18,8 @@ from PySide6.QtCore import Qt, QSize
 from src.tabs.job_page import JobPageWidget
 from src.tabs.archive_page import ArchivePageWidget
 
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()

@@ -25,6 +25,7 @@ import fitz
 import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
+from src.wizards.new_job_wizard import NewJobWizard
 
 class NewJobDialog(QDialog):
     def __init__(self, parent=None, base_path=None):
@@ -250,7 +251,7 @@ class JobPageWidget(QWidget):
 
         actions_layout = QHBoxLayout()
         self.add_job_button = QPushButton("Add Job")
-        self.add_job_button.clicked.connect(self.open_new_job_dialog)
+        self.add_job_button.clicked.connect(self.open_new_job_wizard)
 
         actions_layout.addWidget(self.add_job_button)
         layout.addLayout(actions_layout)
@@ -287,12 +288,12 @@ class JobPageWidget(QWidget):
 
         self.load_jobs()
 
-    def open_new_job_dialog(self):
-        dialog = NewJobDialog(self, base_path=self.base_path)
+    def open_new_job_wizard(self):
+        wizard = NewJobWizard(self, base_path=self.base_path)
 
-        if dialog.exec():
-            job_data = dialog.get_data()
-            save_locations = dialog.get_save_locations()
+        if wizard.exec():
+            job_data = wizard.get_data()
+            save_locations = wizard.get_save_locations()
             print("New Job Made: ", job_data)
             self.handle_new_job_creation(job_data, save_locations)            
         else:
