@@ -27,242 +27,6 @@ from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
 from src.wizards.new_job_wizard import NewJobWizard
 
-class NewJobDialog(QDialog):
-    def __init__(self, parent=None, base_path=None):
-        super().__init__(parent)
-        self.base_path = base_path if base_path else os.path.dirname(os.path.abspath(__file__))
-        self.setWindowTitle("Create New Job")
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-        self.setMinimumSize(500, 400)
-
-        # Initialize save location variables
-        self.custom_save_location = None
-
-        # Create a vertical layout for the dialog
-        self.customer_name = QComboBox()
-        self.inlay_type = QComboBox()
-        self.label_size = QComboBox()
-        self.customer_name.setInsertPolicy(QComboBox.InsertPolicy.InsertAtBottom)
-        self.customer_name.setEditable(True)
-
-
-        self.part_number = QLineEdit()
-        self.job_ticket_number = QLineEdit()
-        self.po_number = QLineEdit()
-        self.qty = QLineEdit()
-
-        self.SharedDrive_location = QCheckBox("Auto search/save")
-        self.Desktop_location = QCheckBox("Desktop")
-        self.Browse_Button = QPushButton("Browse")
-
-        # Add a label to show selected custom path
-        self.custom_path_label = QLabel("No custom path selected")
-        self.custom_path_label.setWordWrap(True)
-        self.custom_path_label.setStyleSheet("color: gray; font-size: 10px;")
-
-        # Connect checkbox signals to update browse button state
-        self.SharedDrive_location.stateChanged.connect(self.update_browse_button_state)
-        self.Desktop_location.stateChanged.connect(self.update_browse_button_state)
-
-        # Connect browse button to directory selection
-        self.Browse_Button.clicked.connect(self.browse_for_directory)
-
-        self.dialog = QFileDialog(self)
-        self.dialog.setFileMode(QFileDialog.FileMode.Directory)
-
-        # Create horizontal layout for save location controls
-        save_location_layout = QHBoxLayout()
-        save_location_layout.addWidget(self.SharedDrive_location)
-        save_location_layout.addWidget(self.Desktop_location)
-        save_location_layout.addWidget(self.Browse_Button)
-        save_location_layout.addStretch()  # Pushes controls to the left
-        
-        save_location_widget = QWidget()
-        save_location_widget.setLayout(save_location_layout)
-
-        self.get_lists()
-
-        self.layout = QFormLayout(self)
-        self.layout.addRow("Customer:", self.customer_name)
-        self.layout.addRow("Part#:", self.part_number) 
-        self.layout.addRow("Job Ticket#:", self.job_ticket_number)
-        self.layout.addRow("PO#:", self.po_number)
-        self.layout.addRow("Inlay Type:", self.inlay_type)
-        self.layout.addRow("Label Size:", self.label_size)
-        self.layout.addRow("Qty:", self.qty)
-        self.layout.addRow("Save Location:", save_location_widget)
-        self.layout.addRow("", self.custom_path_label)  # Add the path label
-        
-
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        self.layout.addWidget(self.button_box)
-
-        # Set initial state of browse button
-        self.update_browse_button_state()
-
-    def browse_for_directory(self):
-        """Open directory selection dialog and store the selected path."""
-        directory = QFileDialog.getExistingDirectory(
-            self, 
-            "Select Save Directory", 
-            "", 
-            QFileDialog.Option.ShowDirsOnly
-        )
-        
-        if directory:  # User selected a directory (didn't cancel)
-            self.custom_save_location = directory
-            self.custom_path_label.setText(f"Custom path: {directory}")
-            self.custom_path_label.setStyleSheet("color: black; font-size: 10px;")
-        else:
-            # User cancelled, keep existing selection if any
-            if not self.custom_save_location:
-                self.custom_path_label.setText("No custom path selected")
-                self.custom_path_label.setStyleSheet("color: gray; font-size: 10px;")
-
-    def update_browse_button_state(self):
-        """Enable/disable browse button based on checkbox states."""
-        if self.SharedDrive_location.isChecked() or self.Desktop_location.isChecked():
-            self.Browse_Button.setEnabled(False)
-            self.Browse_Button.setStyleSheet("background-color: #f0f0f0; color: #000000;")
-        else:
-            self.Browse_Button.setEnabled(True)
-            self.Browse_Button.setStyleSheet("")  # Reset to default style
-
-    def accept(self):
-        # This method now overrides the default behavior of the OK button.
-        fields_to_check = {
-            "Customer": self.customer_name.currentText(),
-            "Part#": self.part_number.text(),
-            "Job Ticket#": self.job_ticket_number.text(),
-        }
-        for field_name, value in fields_to_check.items():
-            if not value.strip(): # Use strip() to ensure whitespace isn't considered valid
-                QMessageBox.warning(self, "Validation Error", f"'{field_name}' is a required field.")
-                return # Stop the process
-
-        if not self.inlay_type.currentText().strip():
-            QMessageBox.warning(self, "Validation Error", "Inlay Type is a required field.")
-            return
-
-        if not self.label_size.currentText().strip():
-            QMessageBox.warning(self, "Validation Error", "Label Size is a required field.")
-            return
-        
-        # Handle save location logic
-        self.save_location = None
-        self.save_location1 = None
-        self.save_location2 = None
-        
-        if self.Desktop_location.isChecked() and self.SharedDrive_location.isChecked():
-            self.save_location1 = "Z:\\3 Encoding and Printing Files\\Customers Encoding Files"
-            self.save_location2 = os.path.expanduser("~/Desktop")
-        elif self.Desktop_location.isChecked():
-            self.save_location = os.path.expanduser("~/Desktop")
-        elif self.SharedDrive_location.isChecked():
-            self.save_location = "Z:\\3 Encoding and Printing Files\\Customers Encoding Files"
-        elif self.custom_save_location:
-            self.save_location = self.custom_save_location
-        else:
-            QMessageBox.warning(self, "Validation Error", "Please select a save location.")
-            return
-            
-        # Validate that we have at least one save location
-        if not self.save_location and not (self.save_location1 and self.save_location2):
-            QMessageBox.warning(self, "Validation Error", "Save location is required.")
-            return
-            
-        if self.save_location:
-            self.save_location = self.save_location.strip()
-        
-        super().accept()
-
-    def get_save_locations(self):
-        """Get the configured save location(s) for use by calling code."""
-        if hasattr(self, 'save_location1') and hasattr(self, 'save_location2') and self.save_location1 and self.save_location2:
-            return [self.save_location1, self.save_location2]
-        elif hasattr(self, 'save_location') and self.save_location:
-            return [self.save_location]
-        else:
-            return []
-            
-    def get_data(self):
-        return {
-            "Customer": self.customer_name.currentText(),
-            "Part#": self.part_number.text(),
-            "Job Ticket#": self.job_ticket_number.text(),
-            "PO#": self.po_number.text(),
-            "Inlay Type": self.inlay_type.currentText(),
-            "Label Size": self.label_size.currentText(),
-            "Qty": self.qty.text()
-        }
-    
-    def _populate_combo_from_file(self, combo, file_path):
-        try:
-            with open(file_path, "r", encoding="utf-8") as file:
-                items = [line.strip() for line in file if line.strip()]
-                combo.clear()
-                combo.addItem("")
-                combo.addItems(items)
-        except FileNotFoundError:
-            print(f"File not found: {file_path}")
-    
-    def get_lists(self):
-        try:
-            self._populate_combo_from_file(self.customer_name, os.path.join(self.base_path, "data", "Customer_names.txt"))
-            self._populate_combo_from_file(self.inlay_type, os.path.join(self.base_path, "data", "Inlay_types.txt"))
-            self._populate_combo_from_file(self.label_size, os.path.join(self.base_path, "data", "Label_sizes.txt"))
-            
-            if self.customer_name.count() <= 1:
-                print("Warning: Customer names combo box is empty")
-            if self.inlay_type.count() <= 1:
-                print("Warning: Inlay types combo box is empty")
-            if self.label_size.count() <= 1:
-                print("Warning: Label sizes combo box is empty")
-                
-        except Exception as e:
-            print(f"Error loading combo box data: {e}")
-            QMessageBox.warning(
-                self,
-                "Loading Error",
-                f"There was an error loading the dropdown menus: {str(e)}\n"
-                f"Base path used: {self.base_path}"
-            )
-
-    def set_data(self, data):
-        self.customer_name.setCurrentText(data.get("Customer", ""))
-        self.part_number.setText(data.get("Part#", ""))
-        self.job_ticket_number.setText(data.get("Job Ticket#", ""))
-        self.po_number.setText(data.get("PO#", ""))
-        self.inlay_type.setCurrentText(data.get("Inlay Type", ""))
-        self.label_size.setCurrentText(data.get("Label Size", ""))
-        self.qty.setText(data.get("Qty", ""))
-
-    def open_new_job_wizard(self):
-        wizard = NewJobWizard(self, base_path=self.base_path)
-
-        if wizard.exec():
-            job_data = wizard.get_all_data()
-            save_locations = wizard.get_save_locations()
-            print("New Job Made: ", job_data)
-            self.handle_new_job_creation(job_data, save_locations)            
-        else:
-            print("job not created")
-
-    def add_job_to_table(self, job_data, status="New"):
-        row_items = [
-            QStandardItem(job_data.get("Customer", "")),
-            QStandardItem(job_data.get("Part#", "")),
-            QStandardItem(job_data.get("Job Ticket#", "")),
-            QStandardItem(job_data.get("PO#", "")),
-            QStandardItem(job_data.get("Inlay Type", "")),
-            QStandardItem(job_data.get("Label Size", "")),
-            QStandardItem(job_data.get("Qty", "")),
-            QStandardItem(status)
-        ]
-        self.model.appendRow(row_items)
-
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
     
@@ -314,9 +78,10 @@ class JobPageWidget(QWidget):
 
     def open_new_job_wizard(self):
         wizard = NewJobWizard(self, base_path=self.base_path)
+        wizard.setWindowTitle("New Job")
 
         if wizard.exec():
-            job_data = wizard.get_all_data()
+            job_data = wizard.get_data()
             save_locations = wizard.get_save_locations()
             print("New Job Made: ", job_data)
             self.handle_new_job_creation(job_data, save_locations)            
@@ -331,7 +96,7 @@ class JobPageWidget(QWidget):
             QStandardItem(job_data.get("PO#", "")),
             QStandardItem(job_data.get("Inlay Type", "")),
             QStandardItem(job_data.get("Label Size", "")),
-            QStandardItem(job_data.get("Qty", "")),
+            QStandardItem(job_data.get("Quantity", "")),
             QStandardItem(status)
         ]
         self.model.appendRow(row_items)
@@ -497,20 +262,26 @@ class JobPageWidget(QWidget):
             return
         selected_row_index = selection_model.selectedRows()[0]
         
-        current_data = {}
-        for col, header in enumerate(self.headers):
-            cell_index = self.model.index(selected_row_index.row(), col)
-            current_data[header] = self.model.data(cell_index, Qt.DisplayRole)
+        current_data = self._get_job_data_for_row(selected_row_index.row())
 
-        dialog = NewJobDialog(self, base_path=self.base_path)
-        dialog.set_data(current_data)
+        wizard = NewJobWizard(self, base_path=self.base_path)
+        wizard.setWindowTitle("Edit Job")
+        wizard.set_all_data(current_data)
 
-        if dialog.exec():
-            new_data = dialog.get_data()
+        # For editing, we don't need to re-select the save location
+        # so we can hide that page.
+        wizard.setPage(2, QWidget()) # Hides the save location page
+        wizard.page(2).setVisible(False)
+
+
+        if wizard.exec():
+            new_data = wizard.get_data()
             for col, header in enumerate(self.headers):
                 if header in new_data:
                     cell_index = self.model.index(selected_row_index.row(), col)
                     self.model.setData(cell_index, new_data[header], Qt.EditRole)
+            
+            self.save_data()
 
     def delete_selected_job(self):
         selection_model = self.jobs_table.selectionModel()
@@ -594,7 +365,13 @@ class JobPageWidget(QWidget):
             "PO#": "customer_po",
             "Inlay Type": "inlay_type",
             "Label Size": "label_size",
-            "Qty": "qty",
+            "Quantity": "qty",
+            "Item": "item",
+            "UPC Number": "upc",
+            "LPR": "lpr",
+            "Rolls": "rolls",
+            "Start":"start",
+            "End":"end",
             "Date": "Date",
         }
 

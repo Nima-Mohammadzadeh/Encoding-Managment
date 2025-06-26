@@ -28,13 +28,19 @@ class NewJobWizard(QWizard):
         print("Wizard accepted")
         super().accept()
 
-    def get_all_data(self):
+    def get_data(self):
         all_data = {}
         for page_id in range(self.pageIds().__len__()):
             page = self.page(self.pageIds()[page_id])
             if hasattr(page, 'get_data'):
                 all_data.update(page.get_data())
         return all_data
+
+    def set_all_data(self, data):
+        for page_id in range(self.pageIds().__len__()):
+            page = self.page(self.pageIds()[page_id])
+            if hasattr(page, 'set_data'):
+                page.set_data(data)
 
     def get_save_locations(self):
         # The save location page is the 3rd page, index 2
@@ -107,9 +113,9 @@ class JobDetailsPage(QWizardPage):
     def set_data(self, data):
         self.job_data = data
         self.customer_name.setCurrentText(data.get("Customer", ""))
-        self.part_number.setText(data.get("Part Number", ""))
-        self.job_ticket_number.setText(data.get("Job Ticket Number", ""))
-        self.po_number.setText(data.get("PO Number", ""))
+        self.part_number.setText(data.get("Part#", ""))
+        self.job_ticket_number.setText(data.get("Job Ticket#", ""))
+        self.po_number.setText(data.get("PO#", ""))
         self.inlay_type.setCurrentText(data.get("Inlay Type", ""))
         self.label_size.setCurrentText(data.get("Label Size", ""))
         print(f"Data set: {data}")
@@ -127,9 +133,9 @@ class JobDetailsPage(QWizardPage):
     def get_data(self):
         return {
             "Customer": self.customer_name.currentText(),
-            "Part Number": self.part_number.text(),
-            "Job Ticket Number": self.job_ticket_number.text(),
-            "PO Number": self.po_number.text(),
+            "Part#": self.part_number.text(),
+            "Job Ticket#": self.job_ticket_number.text(),
+            "PO#": self.po_number.text(),
             "Inlay Type": self.inlay_type.currentText(),
             "Label Size": self.label_size.currentText()
         }
@@ -145,29 +151,80 @@ class EncodingPage(QWizardPage):
         self.serial_number = QLineEdit()
         self.item = QLineEdit()
         self.qty = QLineEdit()
+        self.lpr = QLineEdit()
+        
+        # Add read-only field for calculated rolls
+        self.rolls_display = QLineEdit()
+        self.rolls_display.setReadOnly(True)
+        self.rolls_display.setStyleSheet("background-color: #f0f0f0; color: #666;")
+        self.rolls_display.setPlaceholderText("Calculated automatically")
 
+        # Connect qty and lpr fields to trigger calculation
+        self.qty.textChanged.connect(self.calculate_rolls)
+        self.lpr.textChanged.connect(self.calculate_rolls)
 
         self.layout = QFormLayout(self)
         self.layout.addRow("Item:", self.item)
         self.layout.addRow("Qty:", self.qty)
         self.layout.addRow("UPC Number:", self.upc_number) 
         self.layout.addRow("Serial Number:", self.serial_number)
+        self.layout.addRow("LPR:", self.lpr)
+        self.layout.addRow("Rolls:", self.rolls_display)
 
+    def calculate_rolls(self):
+        """Calculate and display the number of rolls based on qty and lpr."""
+        try:
+            qty_text = self.qty.text().strip()
+            lpr_text = self.lpr.text().strip()
+            
+            if qty_text and lpr_text:
+                qty = int(qty_text)
+                lpr = int(lpr_text)
+                if lpr > 0:  # Avoid division by zero
+                    rolls = qty // lpr
+                    remainder = qty % lpr
+                    if remainder > 0:
+                        self.rolls_display.setText(f"{rolls} (+ {remainder} labels)")
+                    else:
+                        self.rolls_display.setText(str(rolls))
+                else:
+                    self.rolls_display.setText("LPR must be > 0")
+            else:
+                self.rolls_display.setText("")
+        except ValueError:
+            # Invalid input, clear the rolls display
+            self.rolls_display.setText("Invalid input")
 
     def set_data(self, data):
         self.item.setText(data.get("Item", ""))
-        self.qty.setText(data.get("Qty", ""))
+        self.qty.setText(data.get("Quantity", ""))
+        self.lpr.setText(data.get("LPR", ""))
         self.upc_number.setText(data.get("UPC Number", ""))
         self.serial_number.setText(data.get("Serial Number", ""))
-
+        # Trigger calculation after setting data
+        self.calculate_rolls()
 
     def get_data(self):
+        # Calculate rolls for return data
+        calculated_rolls = 0
+        try:
+            qty_text = self.qty.text().strip()
+            lpr_text = self.lpr.text().strip()
+            if qty_text and lpr_text:
+                qty = int(qty_text)
+                lpr = int(lpr_text)
+                if lpr > 0:
+                    calculated_rolls = qty // lpr
+        except ValueError:
+            calculated_rolls = 0
+
         return {
             "Serial Number": self.serial_number.text(),
             "UPC Number": self.upc_number.text(),
             "Item": self.item.text(),
-            "Qty": self.qty.text()
-
+            "Quantity": self.qty.text(),
+            "LPR": self.lpr.text(),
+            "Rolls": str(calculated_rolls)
         }
 
 class SaveLocationPage(QWizardPage):
