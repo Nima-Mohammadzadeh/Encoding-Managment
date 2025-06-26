@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from qt_material import apply_stylesheet
+from src.shared_serial_manager import get_serial_range
 
 class NewJobWizard(QWizard):
     def __init__(self, parent=None, base_path=None):
@@ -59,6 +60,42 @@ class NewJobWizard(QWizard):
             locations.append(save_data.get("Custom Path"))
             
         return locations
+
+    def assign_serial_numbers(self):
+        """Request serial numbers from the server and assign them to the encoding page."""
+        try:
+            # Get the encoding page (page 1, index 1)
+            encoding_page = self.page(self.pageIds()[1])
+            
+            # Get the quantity from the encoding page
+            quantity_text = encoding_page.qty.text().strip()
+            if not quantity_text:
+                return False, "Quantity is required to assign serial numbers"
+            
+            try:
+                quantity = int(quantity_text)
+                if quantity <= 0:
+                    return False, "Quantity must be greater than 0"
+            except ValueError:
+                return False, "Invalid quantity value"
+            
+            # Request serial numbers from the server
+            result = get_serial_range(quantity)
+            
+            if result.get("success"):
+                start_serial = result["start_serial"]
+                end_serial = result["end_serial"]
+                
+                # Set the serial numbers in the encoding page
+                encoding_page.set_serial_numbers(start_serial, end_serial)
+                
+                return True, f"Serial numbers assigned: {start_serial} to {end_serial}"
+            else:
+                error_msg = result.get("error", "Unknown error occurred")
+                return False, f"Failed to get serial numbers: {error_msg}"
+                
+        except Exception as e:
+            return False, f"Error assigning serial numbers: {str(e)}"
     
 
 class JobDetailsPage(QWizardPage):
@@ -148,10 +185,19 @@ class EncodingPage(QWizardPage):
         self.setSubTitle("Enter encoding information for the job, UPC, Serial Number, etc.")
 
         self.upc_number = QLineEdit()
-        self.serial_number = QLineEdit()
         self.item = QLineEdit()
         self.qty = QLineEdit()
         self.lpr = QLineEdit()
+        # Add read-only fields for serial numbers (assigned automatically)
+        self.start_serial_number = QLineEdit()
+        self.start_serial_number.setReadOnly(True)
+        self.start_serial_number.setStyleSheet("background-color: #f0f0f0; color: #666;")
+        self.start_serial_number.setPlaceholderText("Assigned when job is created")
+
+        self.end_serial_number = QLineEdit()
+        self.end_serial_number.setReadOnly(True)
+        self.end_serial_number.setStyleSheet("background-color: #f0f0f0; color: #666;")
+        self.end_serial_number.setPlaceholderText("Assigned when job is created")
         
         # Add read-only field for calculated rolls
         self.rolls_display = QLineEdit()
@@ -201,9 +247,15 @@ class EncodingPage(QWizardPage):
         self.qty.setText(data.get("Quantity", ""))
         self.lpr.setText(data.get("LPR", ""))
         self.upc_number.setText(data.get("UPC Number", ""))
-        self.serial_number.setText(data.get("Serial Number", ""))
+        self.start_serial_number.setText(data.get("Start Serial", ""))
+        self.end_serial_number.setText(data.get("End Serial", ""))
         # Trigger calculation after setting data
         self.calculate_rolls()
+
+    def set_serial_numbers(self, start_serial, end_serial):
+        """Set the serial number fields after getting them from the server."""
+        self.start_serial_number.setText(str(start_serial))
+        self.end_serial_number.setText(str(end_serial))
 
     def get_data(self):
         # Calculate rolls for return data
@@ -220,7 +272,8 @@ class EncodingPage(QWizardPage):
             calculated_rolls = 0
 
         return {
-            "Serial Number": self.serial_number.text(),
+            "Start Serial": self.start_serial_number.text(),
+            "End Serial": self.end_serial_number.text(),
             "UPC Number": self.upc_number.text(),
             "Item": self.item.text(),
             "Quantity": self.qty.text(),

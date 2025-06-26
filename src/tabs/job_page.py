@@ -84,7 +84,7 @@ class JobPageWidget(QWidget):
             job_data = wizard.get_data()
             save_locations = wizard.get_save_locations()
             print("New Job Made: ", job_data)
-            self.handle_new_job_creation(job_data, save_locations)            
+            self.handle_new_job_creation(job_data, save_locations, wizard)            
         else:
             print("job not created")
 
@@ -325,12 +325,24 @@ class JobPageWidget(QWidget):
             
             self.save_data() 
 
-    def handle_new_job_creation(self, job_data, save_locations):
+    def handle_new_job_creation(self, job_data, save_locations, wizard=None):
         '''
         This function is called when a new job is created.
-        It will create a new job folder and fill the checklist with the job data.
+        It will assign serial numbers, create a job folder and fill the checklist with the job data.
         '''
         try:
+            # First, assign serial numbers if wizard is provided
+            if wizard:
+                success, message = wizard.assign_serial_numbers()
+                if not success:
+                    QMessageBox.warning(self, "Serial Number Warning", 
+                                      f"Could not assign serial numbers: {message}\n\n"
+                                      "Job will be created without serial numbers.")
+                else:
+                    print(f"✅ {message}")
+                    # Update job_data with the newly assigned serial numbers
+                    job_data.update(wizard.get_data())
+
             job_path = self._create_job_folders(job_data, save_locations)
 
             if not job_path:
@@ -339,7 +351,6 @@ class JobPageWidget(QWidget):
             self.add_job_to_table(job_data)
             
             self._generate_checklist(job_data, job_path)
-
 
             QMessageBox.information(self, "Success", "Job created successfully")
 
@@ -370,8 +381,8 @@ class JobPageWidget(QWidget):
             "UPC Number": "upc",
             "LPR": "lpr",
             "Rolls": "rolls",
-            "Start":"start",
-            "End":"end",
+            "Start Serial": "start",
+            "End Serial": "stop",
             "Date": "Date",
         }
 

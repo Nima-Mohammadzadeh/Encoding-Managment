@@ -10,13 +10,14 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox
 )
-import pymupdf, shutil, os, sys
+import pymupdf, shutil, os, sys, json
 from qt_material import apply_stylesheet
 from PySide6.QtCore import Qt, QSize
 
 # Import the widgets from their new locations
 from src.tabs.job_page import JobPageWidget
 from src.tabs.archive_page import ArchivePageWidget
+from src.shared_serial_manager import initialize_shared_serial_manager
 
 
 
@@ -30,6 +31,9 @@ class MainWindow(QMainWindow):
 
         # Define the base path for the application
         self.base_path = os.path.dirname(os.path.abspath(__file__))
+        
+        # Initialize shared serial number system
+        self.initialize_shared_serial_system()
 
         # Main layout
         main_layout = QHBoxLayout()
@@ -71,6 +75,47 @@ class MainWindow(QMainWindow):
 
         # Set initial page
         self.nav_list.setCurrentRow(0)
+
+    def initialize_shared_serial_system(self):
+        """Initialize the shared serial number system using Z: drive."""
+        try:
+            # Load settings to get the shared path
+            settings_path = os.path.join(self.base_path, "settings.json")
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r') as f:
+                    settings = json.load(f)
+            else:
+                settings = {}
+            
+            # Get shared path (defaults to Z: drive)
+            shared_path = settings.get("base_path", r"Z:\3 Encoding and Printing Files\Customers Encoding Files")
+            
+            # Try to initialize the shared serial manager
+            success = initialize_shared_serial_manager(shared_path)
+            
+            if success:
+                print(f"✅ Shared serial number system initialized at: {shared_path}")
+            else:
+                print(f"⚠️  Could not initialize shared serial system at: {shared_path}")
+                print("   Serial numbers will not be available until the shared drive is accessible.")
+                
+                # Show a non-blocking message to the user
+                QMessageBox.warning(
+                    self,
+                    "Shared Serial System",
+                    f"Could not initialize the shared serial number system.\n\n"
+                    f"Path: {shared_path}\n\n"
+                    "Serial number assignment will not be available until the shared drive is accessible.\n"
+                    "Please check your network connection to the Z: drive."
+                )
+                
+        except Exception as e:
+            print(f"Error initializing shared serial system: {e}")
+            QMessageBox.critical(
+                self,
+                "Serial System Error",
+                f"Error initializing shared serial number system:\n{e}"
+            )
 
     def closeEvent(self, event):
         """Save data when the application is closing."""
