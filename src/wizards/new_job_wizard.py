@@ -3,7 +3,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import (
     QWizard, QWizardPage, QVBoxLayout, QFormLayout, QLineEdit, 
-    QComboBox, QCheckBox, QPushButton, QLabel, QFileDialog, QSizePolicy, QWidget, QMessageBox
+    QComboBox, QCheckBox, QPushButton, QLabel, QFileDialog, QSizePolicy, QWidget, QMessageBox, QHBoxLayout
 )
 from PySide6.QtCore import Qt
 from qt_material import apply_stylesheet
@@ -20,6 +20,7 @@ class NewJobWizard(QWizard):
 
         self.addPage(JobDetailsPage(base_path=self.base_path))
         self.addPage(EncodingPage(base_path=self.base_path))
+        self.addPage(SaveLocationPage(base_path=self.base_path))
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
     
     def accept(self):
@@ -34,6 +35,25 @@ class NewJobWizard(QWizard):
             if hasattr(page, 'get_data'):
                 all_data.update(page.get_data())
         return all_data
+
+    def get_save_locations(self):
+        # The save location page is the 3rd page, index 2
+        save_page = self.page(self.pageIds()[2])
+        save_data = save_page.get_data()
+        
+        locations = []
+        if save_data.get("Shared Drive"):
+            # Use raw string for windows paths
+            locations.append(r"Z:\3 Encoding and Printing Files\Customers Encoding Files")
+        if save_data.get("Desktop"):
+            locations.append(os.path.expanduser("~/Desktop"))
+        
+        # Add custom path only if it exists
+        if save_data.get("Custom Path"):
+            locations.append(save_data.get("Custom Path"))
+            
+        return locations
+    
 
 class JobDetailsPage(QWizardPage):
     def __init__(self, parent=None, base_path=None):
@@ -64,7 +84,7 @@ class JobDetailsPage(QWizardPage):
         self.layout.addRow("Inlay Type:", self.inlay_type)
         self.layout.addRow("Label Size:", self.label_size)
     
-        #self.layout.addRow("Qty:", self.qty)
+        #
         #self.layout.addRow("Save Location:", save_location_widget)
         #self.layout.addRow("", self.custom_path_label)  # Add the path labe
 
@@ -123,13 +143,107 @@ class EncodingPage(QWizardPage):
 
         self.upc_number = QLineEdit()
         self.serial_number = QLineEdit()
-        self.lot_number = QLineEdit()
+        self.item = QLineEdit()
+        self.qty = QLineEdit()
+
 
         self.layout = QFormLayout(self)
-        self.layout.addRow("UPC Number:", self.upc_number)
+        self.layout.addRow("Item:", self.item)
+        self.layout.addRow("Qty:", self.qty)
+        self.layout.addRow("UPC Number:", self.upc_number) 
         self.layout.addRow("Serial Number:", self.serial_number)
-        
 
+
+    def set_data(self, data):
+        self.item.setText(data.get("Item", ""))
+        self.qty.setText(data.get("Qty", ""))
+        self.upc_number.setText(data.get("UPC Number", ""))
+        self.serial_number.setText(data.get("Serial Number", ""))
+
+
+    def get_data(self):
+        return {
+            "Serial Number": self.serial_number.text(),
+            "UPC Number": self.upc_number.text(),
+            "Item": self.item.text(),
+            "Qty": self.qty.text()
+
+        }
+
+class SaveLocationPage(QWizardPage):
+    def __init__(self, parent=None, base_path=None):
+        super().__init__(parent)
+        self.setTitle("Step 3: Save Location")
+        self.setSubTitle("Select the location to save the job")
+
+        self.custom_save_location = None
+
+        self.SharedDrive_location = QCheckBox("Auto search/save")
+        self.Desktop_location = QCheckBox("Desktop")
+        self.Browse_Button = QPushButton("Browse")
+
+        # Add a label to show selected custom path
+        self.custom_path_label = QLabel("No custom path selected")
+        self.custom_path_label.setWordWrap(True)
+        self.custom_path_label.setStyleSheet("color: gray; font-size: 10px;")
+
+        self.SharedDrive_location.stateChanged.connect(self.update_browse_button_state)
+        self.Desktop_location.stateChanged.connect(self.update_browse_button_state)
+
+        # Connect browse button to directory selection
+        self.Browse_Button.clicked.connect(self.browse_for_directory)
+
+        self.layout = QFormLayout(self)
+        save_location_layout = QHBoxLayout()
+        save_location_layout.addWidget(self.SharedDrive_location)
+        save_location_layout.addWidget(self.Desktop_location)
+        save_location_layout.addWidget(self.Browse_Button)
+        save_location_layout.addStretch()  # Pushes controls to the left
+
+        save_location_widget = QWidget()
+        save_location_widget.setLayout(save_location_layout)
+        self.layout.addRow("Save Location:", save_location_widget)
+        self.layout.addRow("", self.custom_path_label)
+
+        self.update_browse_button_state()
+
+
+    def browse_for_directory(self):
+        """Open directory selection dialog and store the selected path."""
+        directory = QFileDialog.getExistingDirectory(
+            self, 
+            "Select Save Directory", 
+            "", 
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if directory:  # User selected a directory (didn't cancel)
+            self.custom_save_location = directory
+            self.custom_path_label.setText(f"Custom path: {directory}")
+            self.custom_path_label.setStyleSheet("color: black; font-size: 10px;")
+        else:
+            # User cancelled, keep existing selection if any
+            if not self.custom_save_location:
+                self.custom_path_label.setText("No custom path selected")
+                self.custom_path_label.setStyleSheet("color: gray; font-size: 10px;")
+        return directory
+
+    def update_browse_button_state(self):
+        """Enable/disable browse button based on checkbox states."""
+        if self.SharedDrive_location.isChecked() or self.Desktop_location.isChecked():
+            self.Browse_Button.setEnabled(False)
+            self.Browse_Button.setStyleSheet("background-color: #f0f0f0; color: #000000;")
+        else:
+            self.Browse_Button.setEnabled(True)
+            self.Browse_Button.setStyleSheet("")  # Reset to default style
+
+    def get_data(self):
+        return {
+            "Shared Drive": self.SharedDrive_location.isChecked(),
+            "Desktop": self.Desktop_location.isChecked(),
+            "Custom Path": self.custom_save_location
+        }
+        
+        
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     wizard = NewJobWizard()

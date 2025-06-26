@@ -239,6 +239,30 @@ class NewJobDialog(QDialog):
         self.label_size.setCurrentText(data.get("Label Size", ""))
         self.qty.setText(data.get("Qty", ""))
 
+    def open_new_job_wizard(self):
+        wizard = NewJobWizard(self, base_path=self.base_path)
+
+        if wizard.exec():
+            job_data = wizard.get_all_data()
+            save_locations = wizard.get_save_locations()
+            print("New Job Made: ", job_data)
+            self.handle_new_job_creation(job_data, save_locations)            
+        else:
+            print("job not created")
+
+    def add_job_to_table(self, job_data, status="New"):
+        row_items = [
+            QStandardItem(job_data.get("Customer", "")),
+            QStandardItem(job_data.get("Part#", "")),
+            QStandardItem(job_data.get("Job Ticket#", "")),
+            QStandardItem(job_data.get("PO#", "")),
+            QStandardItem(job_data.get("Inlay Type", "")),
+            QStandardItem(job_data.get("Label Size", "")),
+            QStandardItem(job_data.get("Qty", "")),
+            QStandardItem(status)
+        ]
+        self.model.appendRow(row_items)
+
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
     
@@ -292,7 +316,7 @@ class JobPageWidget(QWidget):
         wizard = NewJobWizard(self, base_path=self.base_path)
 
         if wizard.exec():
-            job_data = wizard.get_data()
+            job_data = wizard.get_all_data()
             save_locations = wizard.get_save_locations()
             print("New Job Made: ", job_data)
             self.handle_new_job_creation(job_data, save_locations)            
@@ -347,23 +371,27 @@ class JobPageWidget(QWidget):
         selection_model = self.jobs_table.selectionModel()
         if not selection_model.hasSelection():
             return
-        
+
         menu = QMenu(self)
+
+        menu.addAction("Create Job Folder", self.create_folder_for_selected_job)
+        menu.addAction("Edit Job", self.edit_selected_job)
+        menu.addSeparator()
+        
+        
         submenu = QMenu("Change Status:", self)
         submenu.addAction("New", self.set_status("New"))
         submenu.addAction("In Progress", self.set_status("In Progress"))
         submenu.addAction("On Hold", self.set_status("On Hold"))
         submenu.addAction("Completed", self.set_status("Completed"))
         submenu.addAction("Cancelled", self.set_status("Cancelled"))
-        submenu.addAction("Archived", self.set_status("Archived"))
+        menu.addMenu(submenu)
 
-        menu.addAction("Create Job Folder", self.create_folder_for_selected_job)
-        menu.addAction("Edit Job", self.edit_selected_job)
+        menu.addSeparator()
+
         menu.addAction("Move to Archive", self.move_to_archive)
         menu.addAction("Delete Job", self.delete_selected_job)
-        
-        
-        menu.addMenu(submenu)
+
         menu.exec(event.globalPos())
 
     def set_status(self, status):
