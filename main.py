@@ -52,6 +52,9 @@ class MainWindow(QMainWindow):
         main_layout.setStretchFactor(self.nav_list, 0)
         main_layout.setStretchFactor(self.page_stack, 1)
 
+        # Perform initial sync to load shared drive data first
+        self.perform_initial_sync()
+
         # Instantiate pages, passing the base_path to them
         self.jobs_page = JobPageWidget(base_path=self.base_path)
         self.archive_page = ArchivePageWidget(base_path=self.base_path)
@@ -145,10 +148,44 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error initializing shared job system: {e}")
 
+    def perform_initial_sync(self):
+        """Perform initial sync to load shared drive data at startup."""
+        try:
+            from src.shared_job_manager import auto_sync_if_needed, is_shared_available
+            
+            if is_shared_available():
+                result = auto_sync_if_needed()
+                if result.get("success"):
+                    if not result.get("auto_sync"):
+                        print("🔄 Initial sync completed - loaded latest shared drive data")
+                    else:
+                        print("📊 Shared drive up to date - no initial sync needed")
+                else:
+                    print(f"⚠️  Initial sync failed: {result.get('message', 'Unknown error')}")
+            else:
+                print("⚠️  Shared drive not available at startup - using local data only")
+                
+        except Exception as e:
+            print(f"Error during initial sync: {e}")
+
     def closeEvent(self, event):
         """Save data when the application is closing."""
         print("Closing application")
         self.jobs_page.save_data()
+        
+        # Final sync to ensure shared drive has latest data
+        try:
+            from src.shared_job_manager import auto_sync_if_needed, is_shared_available
+            if is_shared_available():
+                result = auto_sync_if_needed()
+                if result.get("success") and not result.get("auto_sync"):
+                    print("✅ Auto-sync completed: {} active, {} archived".format(
+                        result.get('stats', {}).get('active_jobs_merged', 0),
+                        result.get('stats', {}).get('archived_jobs_merged', 0)
+                    ))
+        except Exception as e:
+            print(f"Error during final sync: {e}")
+            
         event.accept()
 
     def add_page(self, title, widget):
