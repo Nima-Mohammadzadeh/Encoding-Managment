@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, QDate
+from src.shared_job_manager import sync_jobs, get_sync_status, is_shared_available
 
 class ArchivePageWidget(QWidget):
     def __init__(self, base_path):
@@ -61,6 +62,13 @@ class ArchivePageWidget(QWidget):
         self.reset_filter_btn = QPushButton("Reset")
         self.reset_filter_btn.clicked.connect(self.reset_filters)
         filter_layout.addWidget(self.reset_filter_btn)
+
+        # Add sync button for archived jobs
+        self.sync_button = QPushButton("🔄")
+        self.sync_button.setFixedSize(32, 32)
+        self.sync_button.setToolTip("Sync archived jobs with shared drive")
+        self.sync_button.clicked.connect(self.sync_with_shared)
+        filter_layout.addWidget(self.sync_button)
 
         main_layout.addLayout(filter_layout)
 
@@ -105,6 +113,9 @@ class ArchivePageWidget(QWidget):
 
         main_layout.addLayout(content_layout)
         self.setLayout(main_layout)
+        
+        # Update sync button status after UI setup
+        self.update_sync_button_status()
 
     def add_archived_job(self, job_data):
         print(f"Archiving job: {job_data.get('Job Ticket#')}")
@@ -140,8 +151,15 @@ class ArchivePageWidget(QWidget):
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             selected_row_index = selection_model.selectedRows()[0]
-            # Find the corresponding job in self.all_jobs and remove it
+            
+            # Get job data before deleting to track the deletion
             job_to_remove = self._get_job_data_for_row(selected_row_index.row())
+            
+            # Track that this job was intentionally deleted locally
+            from src.shared_job_manager import track_job_deletion
+            track_job_deletion(job_to_remove, "archived")
+            
+            # Find the corresponding job in self.all_jobs and remove it
             self.all_jobs = [j for j in self.all_jobs if j.get('Job Ticket#') != job_to_remove.get('Job Ticket#')]
             self.model.removeRow(selected_row_index.row())
             self.save_data()
@@ -181,6 +199,10 @@ class ArchivePageWidget(QWidget):
         try:
             with open(self.save_file, "w") as f:
                 json.dump(self.all_jobs, f, indent=4)
+            
+            # Auto-sync to shared drive after saving locally (silent)
+            self.auto_sync_to_shared()
+            
         except IOError as e:
             print(f"Error saving data: {e}")
     
@@ -301,3 +323,141 @@ class ArchivePageWidget(QWidget):
         # menu.addAction("Move to Active", self.move_to_archive) # This needs more implementation
         menu.addAction("Delete Job", self.delete_selected_job)
         menu.exec(event.globalPos())
+
+    def sync_with_shared(self):
+        """Sync archived jobs with the shared drive."""
+        # Show sync button as working
+        self.sync_button.setText("⏳")
+        self.sync_button.setEnabled(False)
+        
+        try:
+            # Perform the sync
+            result = sync_jobs()
+            
+            if result["success"]:
+                # Reload the archive with merged data
+                self.reload_archive()
+                
+                # Show success message with stats
+                stats = result["stats"]
+                message = f"✅ Archive sync completed successfully!\n\n"
+                message += f"📊 Statistics:\n"
+                message += f"• Archived jobs: {stats['archived_jobs_merged']} (local: {stats['archived_jobs_local']}, shared: {stats['archived_jobs_shared']})\n"
+                
+                if stats['conflicts_resolved'] > 0:
+                    message += f"• Conflicts resolved: {stats['conflicts_resolved']}\n"
+                
+                message += f"• Sync duration: {stats['sync_duration']}s"
+                
+                QMessageBox.information(self, "Archive Sync Complete", message)
+                
+            else:
+                # Show error message
+                QMessageBox.warning(self, "Sync Failed", f"Could not sync with shared drive:\n\n{result['message']}")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Sync Error", f"An error occurred during sync:\n{str(e)}")
+        
+        finally:
+            # Reset sync button
+            self.update_sync_button_status()
+
+    def reload_archive(self):
+        """Smart reload that preserves archive table formatting and state."""
+        # Save current table state
+        current_selection = None
+        selection_model = self.jobs_table.selectionModel()
+        if selection_model.hasSelection():
+            selected_row = selection_model.selectedRows()[0].row()
+            if selected_row < len(self.all_jobs):
+                current_selection = self.all_jobs[selected_row]
+        
+        # Save current sort state
+        header = self.jobs_table.horizontalHeader()
+        sort_column = header.sortIndicatorSection()
+        sort_order = header.sortIndicatorOrder()
+        
+        # Load updated archived jobs from file
+        if not os.path.exists(self.save_file):
+            print("No archived jobs file found during reload")
+            return
+            
+        try:
+            with open(self.save_file, "r") as f:
+                updated_jobs = json.load(f)
+        except Exception as e:
+            print(f"Error loading archived jobs during reload: {e}")
+            return
+        
+        # Update internal data and refresh display
+        self.all_jobs = updated_jobs
+        self.update_archive_display()
+        
+        # Restore sort state
+        if sort_column >= 0:
+            self.jobs_table.sortByColumn(sort_column, sort_order)
+        
+        # Restore selection if possible
+        if current_selection:
+            self._restore_archive_selection(current_selection)
+        
+        print(f"✅ Smart archive update: {len(updated_jobs)} archived jobs processed")
+
+    def _restore_archive_selection(self, target_job):
+        """Try to restore the previously selected archived job."""
+        target_key = f"{target_job.get('Customer', '')}-{target_job.get('Job Ticket#', '')}-{target_job.get('PO#', '')}"
+        
+        for row in range(self.model.rowCount()):
+            if row < len(self.all_jobs):
+                current_job = self.all_jobs[row]
+                current_key = f"{current_job.get('Customer', '')}-{current_job.get('Job Ticket#', '')}-{current_job.get('PO#', '')}"
+                
+                if current_key == target_key:
+                    # Restore selection
+                    selection_model = self.jobs_table.selectionModel()
+                    index = self.model.index(row, 0)
+                    selection_model.select(index, selection_model.SelectionFlag.ClearAndSelect | selection_model.SelectionFlag.Rows)
+                    break
+
+    def update_sync_button_status(self):
+        """Update the sync button appearance based on shared drive availability."""
+        if is_shared_available():
+            self.sync_button.setText("🔄")
+            self.sync_button.setEnabled(True)
+            self.sync_button.setStyleSheet("")
+            
+            # Get sync status for tooltip
+            status = get_sync_status()
+            if status.get("last_sync"):
+                last_sync = status["last_sync"]
+                sync_count = status.get("sync_count", 0)
+                conflicts = status.get("conflicts_resolved", 0)
+                
+                tooltip = f"Sync archived jobs with shared drive\n"
+                tooltip += f"Last sync: {last_sync[:16]}\n"
+                tooltip += f"Total syncs: {sync_count}"
+                if conflicts > 0:
+                    tooltip += f"\nConflicts resolved: {conflicts}"
+            else:
+                tooltip = "Sync archived jobs with shared drive\nNever synced"
+                
+            self.sync_button.setToolTip(tooltip)
+        else:
+            self.sync_button.setText("⚠️")
+            self.sync_button.setEnabled(False)
+            self.sync_button.setStyleSheet("background-color: #ffcccc;")
+            self.sync_button.setToolTip("Shared drive not accessible\nCannot sync at this time")
+
+    def auto_sync_to_shared(self):
+        """Automatically sync to shared drive in background (silent)."""
+        try:
+            if is_shared_available():
+                result = sync_jobs()
+                if result["success"]:
+                    print(f"✅ Auto-sync completed for archive: {result['stats']['archived_jobs_merged']} archived jobs")
+                    # Update sync button status to reflect latest sync
+                    self.update_sync_button_status()
+                else:
+                    print(f"⚠️  Auto-sync failed for archive: {result['message']}")
+        except Exception as e:
+            print(f"Archive auto-sync error: {e}")

@@ -26,6 +26,7 @@ import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
 from src.wizards.new_job_wizard import NewJobWizard
+from src.shared_job_manager import sync_jobs, get_sync_status, is_shared_available
 
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
@@ -41,7 +42,15 @@ class JobPageWidget(QWidget):
         self.add_job_button = QPushButton("Add Job")
         self.add_job_button.clicked.connect(self.open_new_job_wizard)
 
+        # Add sync button (square-ish shape)
+        self.sync_button = QPushButton("🔄")
+        self.sync_button.setFixedSize(32, 32)
+        self.sync_button.setToolTip("Sync jobs with shared drive\nClick to refresh team jobs")
+        self.sync_button.clicked.connect(self.sync_with_shared)
+        
         actions_layout.addWidget(self.add_job_button)
+        actions_layout.addWidget(self.sync_button)
+        actions_layout.addStretch()  # Push buttons to the left
         layout.addLayout(actions_layout)
 
         self.model = QStandardItemModel()
@@ -75,6 +84,7 @@ class JobPageWidget(QWidget):
         self.setLayout(layout)
 
         self.load_jobs()
+        self.update_sync_button_status()
 
     def open_new_job_wizard(self):
         wizard = NewJobWizard(self, base_path=self.base_path)
@@ -129,6 +139,10 @@ class JobPageWidget(QWidget):
         try:
             with open(self.save_file, "w") as f:
                 json.dump(data_to_save, f, indent=4)
+            
+            # Auto-sync to shared drive after saving locally (silent)
+            self.auto_sync_to_shared()
+            
         except IOError as e:
             print(f"Error saving data: {e}")
 
@@ -292,8 +306,15 @@ class JobPageWidget(QWidget):
                                      "Are you sure you want to delete this job?",
                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-
             selected_row_index = selection_model.selectedRows()[0]
+            
+            # Get job data before deleting to track the deletion
+            job_data = self._get_job_data_for_row(selected_row_index.row())
+            
+            # Track that this job was intentionally deleted locally
+            from src.shared_job_manager import track_job_deletion
+            track_job_deletion(job_data, "active")
+            
             self.model.removeRow(selected_row_index.row())
         
         self.save_data()
@@ -418,3 +439,186 @@ class JobPageWidget(QWidget):
         except Exception as e:
             print(f"Error processing PDF: {e}")
             QMessageBox.critical(self, "PDF Error", f"Could not generate checklist PDF:\n{e}")
+
+    def sync_with_shared(self):
+        """Sync jobs with the shared drive."""
+        # Show sync button as working
+        self.sync_button.setText("⏳")
+        self.sync_button.setEnabled(False)
+        
+        try:
+            # Perform the sync
+            result = sync_jobs()
+            
+            if result["success"]:
+                # Reload the table with merged data
+                self.reload_jobs_table()
+                
+                # Show success message with stats
+                stats = result["stats"]
+                message = f"✅ Sync completed successfully!\n\n"
+                message += f"📊 Statistics:\n"
+                message += f"• Active jobs: {stats['active_jobs_merged']} (local: {stats['active_jobs_local']}, shared: {stats['active_jobs_shared']})\n"
+                message += f"• Archived jobs: {stats['archived_jobs_merged']} (local: {stats['archived_jobs_local']}, shared: {stats['archived_jobs_shared']})\n"
+                
+                if stats['conflicts_resolved'] > 0:
+                    message += f"• Conflicts resolved: {stats['conflicts_resolved']}\n"
+                
+                message += f"• Sync duration: {stats['sync_duration']}s"
+                
+                QMessageBox.information(self, "Sync Complete", message)
+                
+            else:
+                # Show error message
+                QMessageBox.warning(self, "Sync Failed", f"Could not sync with shared drive:\n\n{result['message']}")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Sync Error", f"An error occurred during sync:\n{str(e)}")
+        
+        finally:
+            # Reset sync button
+            self.update_sync_button_status()
+
+    def reload_jobs_table(self):
+        """Smart reload that preserves table formatting and state."""
+        # Save current table state
+        current_selection = None
+        selection_model = self.jobs_table.selectionModel()
+        if selection_model.hasSelection():
+            selected_row = selection_model.selectedRows()[0].row()
+            current_selection = self._get_job_data_for_row(selected_row)
+        
+        # Save current sort state
+        header = self.jobs_table.horizontalHeader()
+        sort_column = header.sortIndicatorSection()
+        sort_order = header.sortIndicatorOrder()
+        
+        # Load updated jobs from file
+        if not os.path.exists(self.save_file):
+            print("No jobs file found during reload")
+            return
+            
+        try:
+            with open(self.save_file, "r") as f:
+                updated_jobs = json.load(f)
+        except Exception as e:
+            print(f"Error loading jobs during reload: {e}")
+            return
+        
+        # Smart update: only change what's different
+        self._smart_update_table(updated_jobs, current_selection, sort_column, sort_order)
+
+    def _smart_update_table(self, updated_jobs, previous_selection, sort_column, sort_order):
+        """Update table content while preserving formatting."""
+        
+        # Create a map of existing jobs for quick lookup
+        existing_jobs = {}
+        for row in range(self.model.rowCount()):
+            job_data = self._get_job_data_for_row(row)
+            job_key = f"{job_data.get('Customer', '')}-{job_data.get('Job Ticket#', '')}-{job_data.get('PO#', '')}"
+            existing_jobs[job_key] = row
+        
+        # Create a map of updated jobs
+        updated_job_keys = set()
+        
+        # Process each updated job
+        for job in updated_jobs:
+            status = job.pop("Status", "New")
+            job["Status"] = status  # Put it back for processing
+            
+            job_key = f"{job.get('Customer', '')}-{job.get('Job Ticket#', '')}-{job.get('PO#', '')}"
+            updated_job_keys.add(job_key)
+            
+            if job_key in existing_jobs:
+                # Update existing job
+                row = existing_jobs[job_key]
+                self._update_table_row(row, job)
+            else:
+                # Add new job
+                self.add_job_to_table(job, job["Status"])
+        
+        # Remove jobs that no longer exist (in reverse order to maintain indices)
+        rows_to_remove = []
+        for job_key, row in existing_jobs.items():
+            if job_key not in updated_job_keys:
+                rows_to_remove.append(row)
+        
+        for row in sorted(rows_to_remove, reverse=True):
+            self.model.removeRow(row)
+        
+        # Restore sort state
+        if sort_column >= 0:
+            self.jobs_table.sortByColumn(sort_column, sort_order)
+        
+        # Restore selection if possible
+        if previous_selection:
+            self._restore_selection(previous_selection)
+        
+        print(f"✅ Smart table update: {len(updated_jobs)} jobs processed")
+
+    def _update_table_row(self, row, job_data):
+        """Update a specific row with new job data."""
+        for col, header in enumerate(self.headers):
+            item = self.model.item(row, col)
+            if item:
+                new_value = job_data.get(header, "")
+                if item.text() != new_value:
+                    item.setText(new_value)
+
+    def _restore_selection(self, job_data):
+        """Try to restore the previously selected job."""
+        target_key = f"{job_data.get('Customer', '')}-{job_data.get('Job Ticket#', '')}-{job_data.get('PO#', '')}"
+        
+        for row in range(self.model.rowCount()):
+            current_job = self._get_job_data_for_row(row)
+            current_key = f"{current_job.get('Customer', '')}-{current_job.get('Job Ticket#', '')}-{current_job.get('PO#', '')}"
+            
+            if current_key == target_key:
+                # Restore selection
+                selection_model = self.jobs_table.selectionModel()
+                index = self.model.index(row, 0)
+                selection_model.select(index, selection_model.SelectionFlag.ClearAndSelect | selection_model.SelectionFlag.Rows)
+                break
+
+    def update_sync_button_status(self):
+        """Update the sync button appearance based on shared drive availability."""
+        if is_shared_available():
+            self.sync_button.setText("🔄")
+            self.sync_button.setEnabled(True)
+            self.sync_button.setStyleSheet("")
+            
+            # Get sync status for tooltip
+            status = get_sync_status()
+            if status.get("last_sync"):
+                last_sync = status["last_sync"]
+                sync_count = status.get("sync_count", 0)
+                conflicts = status.get("conflicts_resolved", 0)
+                
+                tooltip = f"Sync jobs with shared drive\n"
+                tooltip += f"Last sync: {last_sync[:16]}\n"
+                tooltip += f"Total syncs: {sync_count}"
+                if conflicts > 0:
+                    tooltip += f"\nConflicts resolved: {conflicts}"
+            else:
+                tooltip = "Sync jobs with shared drive\nNever synced"
+                
+            self.sync_button.setToolTip(tooltip)
+        else:
+            self.sync_button.setText("⚠️")
+            self.sync_button.setEnabled(False)
+            self.sync_button.setStyleSheet("background-color: #ffcccc;")
+            self.sync_button.setToolTip("Shared drive not accessible\nCannot sync at this time")
+
+    def auto_sync_to_shared(self):
+        """Automatically sync to shared drive in background (silent)."""
+        try:
+            if is_shared_available():
+                result = sync_jobs()
+                if result["success"]:
+                    print(f"✅ Auto-sync completed: {result['stats']['active_jobs_merged']} active, {result['stats']['archived_jobs_merged']} archived")
+                    # Update sync button status to reflect latest sync
+                    self.update_sync_button_status()
+                else:
+                    print(f"⚠️  Auto-sync failed: {result['message']}")
+        except Exception as e:
+            print(f"Auto-sync error: {e}")

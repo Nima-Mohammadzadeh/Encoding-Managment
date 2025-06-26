@@ -18,6 +18,7 @@ from PySide6.QtCore import Qt, QSize
 from src.tabs.job_page import JobPageWidget
 from src.tabs.archive_page import ArchivePageWidget
 from src.shared_serial_manager import initialize_shared_serial_manager
+from src.shared_job_manager import initialize_shared_job_manager
 
 
 
@@ -32,8 +33,9 @@ class MainWindow(QMainWindow):
         # Define the base path for the application
         self.base_path = os.path.dirname(os.path.abspath(__file__))
         
-        # Initialize shared serial number system
+        # Initialize shared systems
         self.initialize_shared_serial_system()
+        self.initialize_shared_job_system()
 
         # Main layout
         main_layout = QHBoxLayout()
@@ -116,6 +118,32 @@ class MainWindow(QMainWindow):
                 "Serial System Error",
                 f"Error initializing shared serial number system:\n{e}"
             )
+
+    def initialize_shared_job_system(self):
+        """Initialize the shared job synchronization system."""
+        try:
+            # Load settings to get the shared path
+            settings_path = os.path.join(self.base_path, "settings.json")
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r') as f:
+                    settings = json.load(f)
+            else:
+                settings = {}
+            
+            # Get shared path
+            shared_path = settings.get("base_path", r"Z:\3 Encoding and Printing Files\Customers Encoding Files")
+            local_path = os.path.join(self.base_path, "data")
+            
+            # Initialize the shared job manager
+            success = initialize_shared_job_manager(shared_path, local_path)
+            
+            if success:
+                print(f"✅ Shared job system initialized")
+            else:
+                print(f"⚠️  Could not initialize shared job system")
+                
+        except Exception as e:
+            print(f"Error initializing shared job system: {e}")
 
     def closeEvent(self, event):
         """Save data when the application is closing."""

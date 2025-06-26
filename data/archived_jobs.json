@@ -1,34 +1,43 @@
 [
-    {
-        "Customer": "Peak Technologies",
-        "Part#": "113",
-        "Job Ticket#": "12231",
-        "PO#": "123123123",
-        "Inlay Type": "EOS-241 Paper",
-        "Label Size": "1.76 x 0.71",
-        "Quantity": "",
-        "Status": "Archived"
-    },
-    {
-        "Customer": "Peak Technologies",
-        "Inlay Type": "EOS-241 Paper",
-        "Job Ticket#": "1223123",
-        "Label Size": "1.85 x 0.91",
-        "PO#": "131231",
-        "Part#": "123123",
-        "Quantity": "",
-        "Status": "New",
-        "dateArchived": "2025-06-26 09:13:52"
-    },
-    {
-        "Customer": "Peak Technologies",
-        "Inlay Type": "EOS-241 Paper",
-        "Job Ticket#": "12351",
-        "Label Size": "1.85 x 0.91",
-        "PO#": "12451",
-        "Part#": "12351",
-        "Quantity": "123123",
-        "Status": "New",
-        "dateArchived": "2025-06-26 10:16:03"
-    }
+  {
+    "Customer": "Peak Technologies",
+    "Part#": "113",
+    "Job Ticket#": "12231",
+    "PO#": "123123123",
+    "Inlay Type": "EOS-241 Paper",
+    "Label Size": "1.76 x 0.71",
+    "Quantity": "",
+    "Status": "Archived",
+    "_source": "local",
+    "_sync_timestamp": "2025-06-26T14:27:10.455845",
+    "_conflict_resolved": "local_preferred"
+  },
+  {
+    "Customer": "Peak Technologies",
+    "Inlay Type": "EOS-241 Paper",
+    "Job Ticket#": "1223123",
+    "Label Size": "1.85 x 0.91",
+    "PO#": "131231",
+    "Part#": "123123",
+    "Quantity": "",
+    "Status": "New",
+    "dateArchived": "2025-06-26 09:13:52",
+    "_source": "local",
+    "_sync_timestamp": "2025-06-26T14:27:10.455845",
+    "_conflict_resolved": "local_preferred"
+  },
+  {
+    "Customer": "Peak Technologies",
+    "Inlay Type": "EOS-241 Paper",
+    "Job Ticket#": "12351",
+    "Label Size": "1.85 x 0.91",
+    "PO#": "12451",
+    "Part#": "12351",
+    "Quantity": "123123",
+    "Status": "New",
+    "dateArchived": "2025-06-26 10:16:03",
+    "_source": "local",
+    "_sync_timestamp": "2025-06-26T14:27:10.455845",
+    "_conflict_resolved": "local_preferred"
+  }
 ]
