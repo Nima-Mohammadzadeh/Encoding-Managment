@@ -167,8 +167,7 @@ class EncodingPage(QWizardPage):
         self.layout.addRow("Item:", self.item)
         self.layout.addRow("Qty:", self.qty)
         self.layout.addRow("UPC Number:", self.upc_number) 
-        self.layout.addRow("Starting serial number:", self.start_serial_number)
-        self.layout.addRow("Ending serial number:", self.end_serial_number)
+        self.layout.addRow("Serial Number:", self.serial_number)
         self.layout.addRow("LPR:", self.lpr)
         self.layout.addRow("Rolls:", self.rolls_display)
 
