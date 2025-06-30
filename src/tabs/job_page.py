@@ -26,6 +26,7 @@ import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
 from src.wizards.new_job_wizard import NewJobWizard
+from src.widgets.job_details_dialog import JobDetailsDialog
 
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
@@ -75,6 +76,9 @@ class JobPageWidget(QWidget):
         self.setLayout(layout)
 
         self.load_jobs()
+
+        # Add double-click handler for the table
+        self.jobs_table.doubleClicked.connect(self.open_job_details)
 
     def open_new_job_wizard(self):
         wizard = NewJobWizard(self, base_path=self.base_path)
@@ -407,3 +411,55 @@ class JobPageWidget(QWidget):
         except Exception as e:
             print(f"Error processing PDF: {e}")
             QMessageBox.critical(self, "PDF Error", f"Could not generate checklist PDF:\n{e}")
+
+    def open_job_details(self, index):
+        """Open job details window when job is double-clicked"""
+        if not index.isValid():
+            return
+            
+        row = index.row()
+        job_data = self._get_job_data_for_row(row)
+        
+        # Create and show the job details dialog
+        dialog = JobDetailsDialog(job_data, self.base_path, self)
+        
+        # Connect signals
+        dialog.job_updated.connect(self.update_job_in_table)
+        dialog.job_archived.connect(self.handle_job_archived)
+        dialog.job_deleted.connect(lambda: self.delete_job_by_row(row))
+        
+        dialog.exec()
+        
+    def update_job_in_table(self, updated_job_data):
+        """Update job data in the table"""
+        # Find the row with matching job data and update it
+        for row in range(self.model.rowCount()):
+            current_job = self._get_job_data_for_row(row)
+            if (current_job.get('Job Ticket#') == updated_job_data.get('Job Ticket#') and
+                current_job.get('PO#') == updated_job_data.get('PO#')):
+                
+                # Update the row with new data
+                for col, header in enumerate(self.headers):
+                    if header in updated_job_data:
+                        item = QStandardItem(updated_job_data[header])
+                        self.model.setItem(row, col, item)
+                break
+        self.save_data()
+        
+    def handle_job_archived(self, job_data):
+        """Handle job being archived from details dialog"""
+        self.job_to_archive.emit(job_data)
+        # Remove from current table
+        for row in range(self.model.rowCount()):
+            current_job = self._get_job_data_for_row(row)
+            if (current_job.get('Job Ticket#') == job_data.get('Job Ticket#') and
+                current_job.get('PO#') == job_data.get('PO#')):
+                self.model.removeRow(row)
+                break
+        self.save_data()
+        
+    def delete_job_by_row(self, row):
+        """Delete job by row index"""
+        if 0 <= row < self.model.rowCount():
+            self.model.removeRow(row)
+            self.save_data()
