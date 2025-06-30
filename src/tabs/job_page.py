@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 import fitz
 import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer
 from src.wizards.new_job_wizard import NewJobWizard
 from src.widgets.job_details_dialog import JobDetailsDialog
 import src.config as config
@@ -38,6 +38,16 @@ class JobPageWidget(QWidget):
         self.save_file = os.path.join(self.base_path, "data", "active_jobs.json")
         self.network_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
         self.all_jobs = [] # This will be the source of truth
+        
+        # Initialize file system watcher for real-time monitoring
+        self.file_watcher = QFileSystemWatcher()
+        self.file_watcher.directoryChanged.connect(self.on_directory_changed)
+        
+        # Timer to debounce rapid file system changes
+        self.refresh_timer = QTimer()
+        self.refresh_timer.setSingleShot(True)
+        self.refresh_timer.timeout.connect(self.refresh_jobs_table)
+        
         layout = QVBoxLayout(self)
 
         actions_layout = QHBoxLayout()
@@ -78,9 +88,92 @@ class JobPageWidget(QWidget):
         self.setLayout(layout)
 
         self.load_jobs()
+        self.setup_directory_monitoring()
 
         # Add double-click handler for the table
         self.jobs_table.doubleClicked.connect(self.open_job_details)
+
+    def setup_directory_monitoring(self):
+        """Set up file system monitoring for the active jobs source directory."""
+        active_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
+        
+        # Ensure the directory exists
+        if not os.path.exists(active_source_dir):
+            os.makedirs(active_source_dir, exist_ok=True)
+            print(f"Created active jobs source directory: {active_source_dir}")
+        
+        # Add the main directory to watcher
+        if active_source_dir not in self.file_watcher.directories():
+            success = self.file_watcher.addPath(active_source_dir)
+            if success:
+                print(f"Successfully started monitoring: {active_source_dir}")
+            else:
+                print(f"Failed to monitor: {active_source_dir}")
+        
+        # Also monitor all subdirectories recursively
+        self.add_subdirectories_to_watcher(active_source_dir)
+        
+        print(f"Currently monitoring {len(self.file_watcher.directories())} directories")
+
+    def add_subdirectories_to_watcher(self, directory):
+        """Recursively add all subdirectories to the file system watcher."""
+        try:
+            for root, dirs, files in os.walk(directory):
+                if root not in self.file_watcher.directories():
+                    success = self.file_watcher.addPath(root)
+                    if success:
+                        print(f"Added to monitoring: {root}")
+                    else:
+                        print(f"Failed to add to monitoring: {root}")
+        except Exception as e:
+            print(f"Error adding subdirectories to watcher: {e}")
+
+    def on_directory_changed(self, path):
+        """Handle directory change events from the file system watcher."""
+        print(f"Directory changed detected: {path}")
+        
+        # Re-add any new subdirectories to the watcher
+        self.add_subdirectories_to_watcher(config.ACTIVE_JOBS_SOURCE_DIR)
+        
+        # Use timer to debounce rapid changes (wait 500ms after last change)
+        self.refresh_timer.start(500)
+        print("Refresh timer started (500ms delay)")
+
+    def refresh_jobs_table(self):
+        """Refresh the jobs table by reloading data from the file system."""
+        print("=== Refreshing jobs table due to file system changes ===")
+        
+        # Store current selection if any
+        current_selection = None
+        selection_model = self.jobs_table.selectionModel()
+        if selection_model.hasSelection():
+            selected_row = selection_model.selectedRows()[0].row()
+            if 0 <= selected_row < len(self.all_jobs):
+                current_job = self.all_jobs[selected_row]
+                current_selection = (current_job.get('Job Ticket#'), current_job.get('PO#'))
+                print(f"Preserving selection: {current_selection}")
+        
+        # Reload jobs from directory
+        old_count = len(self.all_jobs)
+        self.load_jobs()
+        new_count = len(self.all_jobs)
+        
+        print(f"Job count changed from {old_count} to {new_count}")
+        
+        # Restore selection if possible
+        if current_selection:
+            self.restore_table_selection(current_selection)
+            print("Selection restored")
+
+    def restore_table_selection(self, job_identifiers):
+        """Restore table selection based on job ticket and PO number."""
+        job_ticket, po_num = job_identifiers
+        for row in range(self.model.rowCount()):
+            row_job_ticket = self.model.item(row, self.headers.index("Job Ticket#")).text()
+            row_po_num = self.model.item(row, self.headers.index("PO#")).text()
+            if row_job_ticket == job_ticket and row_po_num == po_num:
+                self.jobs_table.selectRow(row)
+                break
 
     def open_new_job_wizard(self):
         wizard = NewJobWizard(self, base_path=self.base_path)
@@ -94,6 +187,8 @@ class JobPageWidget(QWidget):
             if job_created:
                 # Add to table and our in-memory list
                 self.add_job_to_table(job_data)
+                # Ensure new directories are monitored
+                self.ensure_directory_monitoring()
                 # No longer need to call save_data() as persistence is handled by folder creation
         else:
             print("job not created")
@@ -294,6 +389,9 @@ class JobPageWidget(QWidget):
             del self.all_jobs[selected_row_index.row()]
             self.model.removeRow(selected_row_index.row())
         
+        # Ensure monitoring continues after deletion
+        self.ensure_directory_monitoring()
+
     def _get_job_data_for_row(self, row):
         if 0 <= row < len(self.all_jobs):
             return self.all_jobs[row]
@@ -329,6 +427,9 @@ class JobPageWidget(QWidget):
         # Remove the job from the active list
         self.model.removeRow(selected_row)
         del self.all_jobs[selected_row]
+        
+        # Ensure monitoring continues after archiving
+        self.ensure_directory_monitoring()
         
         QMessageBox.information(self, "Success", "Job has been successfully archived.")
 
@@ -502,6 +603,9 @@ class JobPageWidget(QWidget):
                 item = QStandardItem(str(new_data[header]))
                 self.model.setItem(row_index, col, item)
         
+        # Ensure directories are still being monitored after changes
+        self.ensure_directory_monitoring()
+
     def handle_job_archived(self, job_data):
         """Handle job being archived from details dialog"""
         self.job_to_archive.emit(job_data)
@@ -514,6 +618,9 @@ class JobPageWidget(QWidget):
                 del self.all_jobs[i]
                 break
         
+        # Ensure monitoring continues after archiving
+        self.ensure_directory_monitoring()
+
     def delete_job_by_row(self, row):
         """Delete job by row index, including all its files."""
         if 0 <= row < self.model.rowCount():
@@ -527,6 +634,9 @@ class JobPageWidget(QWidget):
                 self._delete_job_files(job_data)
                 self.model.removeRow(row)
                 del self.all_jobs[row]
+                
+                # Ensure monitoring continues after deletion
+                self.ensure_directory_monitoring()
 
     def _delete_job_files(self, job_data):
         """Deletes job folders from primary and active source locations."""
@@ -605,8 +715,45 @@ class JobPageWidget(QWidget):
             except Exception as e:
                 QMessageBox.warning(self, "Copy Error", f"Could not copy job folder to active source directory.\n\nError: {e}")
             
+            # Ensure new directories are being monitored
+            self.ensure_directory_monitoring()
+            
             return True # Indicate success
 
         except Exception as e:
             print(f"Job not created: {e}")
             return False
+
+    def closeEvent(self, event):
+        """Clean up file system watcher when widget is destroyed."""
+        if hasattr(self, 'file_watcher'):
+            # Remove all paths from watcher
+            for path in self.file_watcher.directories():
+                self.file_watcher.removePath(path)
+            print("File system monitoring stopped.")
+        event.accept()
+
+    def update_active_jobs_source_directory(self, new_path):
+        """Update the active jobs source directory and restart monitoring."""
+        # Remove old paths from watcher
+        for path in self.file_watcher.directories():
+            self.file_watcher.removePath(path)
+        
+        # Update config
+        config.ACTIVE_JOBS_SOURCE_DIR = new_path
+        
+        # Restart monitoring with new path
+        self.setup_directory_monitoring()
+        
+        # Reload jobs from new location
+        self.load_jobs()
+        
+        print(f"Updated active jobs source directory to: {new_path}")
+
+    def ensure_directory_monitoring(self):
+        """Ensure all necessary directories are being monitored."""
+        active_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
+        
+        # Re-setup monitoring if directory has changed
+        if active_source_dir not in self.file_watcher.directories():
+            self.setup_directory_monitoring()

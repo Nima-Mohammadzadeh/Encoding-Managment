@@ -66,6 +66,7 @@ class MainWindow(QMainWindow):
 
         # Connect signals
         self.jobs_page.job_to_archive.connect(self.archive_page.add_archived_job)
+        self.settings_page.active_jobs_source_changed.connect(self.jobs_page.update_active_jobs_source_directory)
         self.nav_list.currentItemChanged.connect(self.switch_page)
 
         # Set central widget

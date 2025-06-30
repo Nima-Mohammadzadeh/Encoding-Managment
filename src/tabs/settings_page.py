@@ -17,11 +17,14 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QScrollArea
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 # We import our config module to get access to the settings object and keys
 import src.config as config
 
 class SettingsPageWidget(QWidget):
+    # Signal emitted when active jobs source directory changes
+    active_jobs_source_changed = Signal(str)
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         # ---------------------------
@@ -178,6 +181,9 @@ class SettingsPageWidget(QWidget):
     def save_directory_settings(self):
         """Save only the directory settings."""
         try:
+            # Store old active jobs source directory to detect changes
+            old_active_jobs_source = config.ACTIVE_JOBS_SOURCE_DIR
+            
             config.settings.setValue(config.ARCHIVE_DIR_KEY, self.archive_dir_edit.text())
             config.ARCHIVE_DIR = self.archive_dir_edit.text()
             
@@ -191,6 +197,11 @@ class SettingsPageWidget(QWidget):
             config.ACTIVE_JOBS_SOURCE_DIR = self.active_jobs_source_dir_edit.text()
             
             config.ensure_dirs_exist()
+            
+            # Emit signal if active jobs source directory changed
+            if old_active_jobs_source != config.ACTIVE_JOBS_SOURCE_DIR:
+                self.active_jobs_source_changed.emit(config.ACTIVE_JOBS_SOURCE_DIR)
+            
             QMessageBox.information(self, "Settings Saved", "Directory settings have been saved successfully!")
             
         except Exception as e:
