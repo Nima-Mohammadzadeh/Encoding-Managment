@@ -375,23 +375,116 @@ class JobDetailsDialog(QDialog):
         job_path = self.find_job_directory()
         if job_path:
             try:
+                # Add files from main job directory
                 for filename in os.listdir(job_path):
-                    if os.path.isfile(os.path.join(job_path, filename)):
-                        self.files_list.addItem(filename)
+                    file_path = os.path.join(job_path, filename)
+                    if os.path.isfile(file_path):
+                        self.files_list.addItem(f"📄 {filename}")
+                
+                # Check for EPC structure and add database files from data folder
+                data_folder = os.path.join(job_path, "data")
+                if os.path.exists(data_folder) and os.path.isdir(data_folder):
+                    self.files_list.addItem("📁 EPC Database Files:")
+                    for filename in os.listdir(data_folder):
+                        file_path = os.path.join(data_folder, filename)
+                        if os.path.isfile(file_path):
+                            self.files_list.addItem(f"  📊 {filename}")
+                
+                # Check for UPC structure and add files from UPC/data folder
+                upc_number = self.job_data.get("UPC Number", "")
+                if upc_number:
+                    upc_folder = os.path.join(job_path, upc_number)
+                    if os.path.exists(upc_folder) and os.path.isdir(upc_folder):
+                        # Add EPC database files from UPC/data folder
+                        upc_data_folder = os.path.join(upc_folder, "data")
+                        if os.path.exists(upc_data_folder) and os.path.isdir(upc_data_folder):
+                            self.files_list.addItem(f"📁 {upc_number}/data (EPC Database Files):")
+                            for filename in os.listdir(upc_data_folder):
+                                file_path = os.path.join(upc_data_folder, filename)
+                                if os.path.isfile(file_path):
+                                    self.files_list.addItem(f"  📊 {filename}")
+                        
+                        # Add template files from UPC/print folder
+                        upc_print_folder = os.path.join(upc_folder, "print")
+                        if os.path.exists(upc_print_folder) and os.path.isdir(upc_print_folder):
+                            self.files_list.addItem(f"📁 {upc_number}/print (Templates):")
+                            for filename in os.listdir(upc_print_folder):
+                                file_path = os.path.join(upc_print_folder, filename)
+                                if os.path.isfile(file_path):
+                                    self.files_list.addItem(f"  🖨️ {filename}")
+                
+                # If no files found, show a message
+                if self.files_list.count() == 0:
+                    self.files_list.addItem("No files found in job directory")
+                    
             except (OSError, PermissionError) as e:
                 self.files_list.addItem(f"Error reading directory: {e}")
 
     def open_selected_file(self):
         item = self.files_list.currentItem()
-        if not item: return
+        if not item: 
+            return
+        
+        item_text = item.text()
+        
+        # Skip folder headers and indented section headers
+        if item_text.startswith("📁") or ":" in item_text:
+            return
         
         job_path = self.find_job_directory()
-        if job_path:
-            file_path = os.path.join(job_path, item.text())
+        if not job_path:
+            return
+        
+        # Determine the actual file path based on the item text format
+        if item_text.startswith("📄"):
+            # Main directory file
+            filename = item_text.replace("📄 ", "")
+            file_path = os.path.join(job_path, filename)
+        elif item_text.startswith("  📊"):
+            # EPC database file - could be in data folder or UPC/data folder
+            filename = item_text.replace("  📊 ", "")
+            
+            # Check if it's in main data folder first
+            main_data_path = os.path.join(job_path, "data", filename)
+            if os.path.exists(main_data_path):
+                file_path = main_data_path
+            else:
+                # Check in UPC/data folder
+                upc_number = self.job_data.get("UPC Number", "")
+                if upc_number:
+                    upc_data_path = os.path.join(job_path, upc_number, "data", filename)
+                    if os.path.exists(upc_data_path):
+                        file_path = upc_data_path
+                    else:
+                        QMessageBox.warning(self, "File Not Found", f"Could not locate file: {filename}")
+                        return
+                else:
+                    QMessageBox.warning(self, "File Not Found", f"Could not locate file: {filename}")
+                    return
+        elif item_text.startswith("  🖨️"):
+            # Template file in UPC/print folder
+            filename = item_text.replace("  🖨️ ", "")
+            upc_number = self.job_data.get("UPC Number", "")
+            if upc_number:
+                file_path = os.path.join(job_path, upc_number, "print", filename)
+            else:
+                QMessageBox.warning(self, "File Not Found", f"Could not locate template file: {filename}")
+                return
+        else:
+            # Fallback to original behavior
+            file_path = os.path.join(job_path, item_text)
+        
+        # Open the file
+        if os.path.exists(file_path):
             if file_path.lower().endswith('.pdf'):
                 self.open_pdf_in_browser(file_path)
+            elif file_path.lower().endswith(('.xlsx', '.xls')):
+                # Open Excel files with default application
+                self.open_path_in_explorer(file_path)
             else:
                 self.open_path_in_explorer(file_path)
+        else:
+            QMessageBox.warning(self, "File Not Found", f"File does not exist: {file_path}")
 
     def open_pdf_in_browser(self, pdf_path):
         try:

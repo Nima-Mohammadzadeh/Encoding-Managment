@@ -40,6 +40,11 @@ ACTIVE_JOBS_SOURCE_DIR_KEY = "paths/active_jobs_source"
 DEFAULT_ACTIVE_JOBS_SOURCE_DIR = os.path.join(BASE_PATH, "active_jobs_source")
 ACTIVE_JOBS_SOURCE_DIR = settings.value(ACTIVE_JOBS_SOURCE_DIR_KEY, DEFAULT_ACTIVE_JOBS_SOURCE_DIR)
 
+# Template base path for EPC conversion functionality (from EPC script)
+TEMPLATE_BASE_PATH_KEY = "paths/template_base"
+DEFAULT_TEMPLATE_BASE_PATH = r'Z:\3 Encoding and Printing Files\Templates'
+TEMPLATE_BASE_PATH = settings.value(TEMPLATE_BASE_PATH_KEY, DEFAULT_TEMPLATE_BASE_PATH)
+
 # --- TXT File Paths for Combobox Data ---
 # These are the .txt files that the job wizard reads from
 CUSTOMER_NAMES_FILE = os.path.join(BASE_PATH, "data", "Customer_names.txt")
@@ -84,3 +89,15 @@ def write_txt_file(file_path, items):
     except Exception as e:
         print(f"Error writing to {file_path}: {e}")
         return False
+
+
+def save_template_base_path(path):
+    """Save the template base path to settings."""
+    settings.setValue(TEMPLATE_BASE_PATH_KEY, path)
+    global TEMPLATE_BASE_PATH
+    TEMPLATE_BASE_PATH = path
+
+
+def get_template_base_path():
+    """Get the current template base path."""
+    return TEMPLATE_BASE_PATH

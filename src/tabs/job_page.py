@@ -28,6 +28,10 @@ from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer
 from src.wizards.new_job_wizard import NewJobWizard
 from src.widgets.job_details_dialog import JobDetailsDialog
 import src.config as config
+from src.utils.epc_conversion import (
+    create_upc_folder_structure, generate_epc_database_files, 
+    validate_upc, calculate_total_quantity_with_percentages
+)
 
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
@@ -189,22 +193,38 @@ class JobPageWidget(QWidget):
             job_created = self.create_job_folder_and_checklist(job_data)
             
             if job_created:
-                # Add to table and our in-memory list
-                self.add_job_to_table(job_data)
-                # Ensure new directories are monitored
+                # Let the file system watcher automatically detect and add the new job
+                # No manual add_job_to_table() call needed - this prevents duplicates
                 self.ensure_directory_monitoring()
                 # No longer need to call save_data() as persistence is handled by folder creation
+                print("Job created successfully - will be automatically detected by file system monitor")
         else:
             print("job not created")
 
     def add_job_to_table(self, job_data):
         # This function will now just handle the view
+        # Check for duplicates using unique identifiers (Ticket# and PO#)
+        job_ticket = job_data.get("Ticket#", job_data.get("Job Ticket#", ""))
+        po_number = job_data.get("PO#", "")
+        
+        # Check if this job already exists in our list
+        for existing_job in self.all_jobs:
+            existing_ticket = existing_job.get("Ticket#", existing_job.get("Job Ticket#", ""))
+            existing_po = existing_job.get("PO#", "")
+            if existing_ticket == job_ticket and existing_po == po_number:
+                print(f"Duplicate job detected and skipped: Ticket#{job_ticket}, PO#{po_number}")
+                return  # Skip adding this duplicate
+        
         # Format the due date to mm/dd/yyyy
         due_date_formatted = self.format_date_for_display(job_data.get("Due Date", ""))
         
         # Handle both old and new column names for backward compatibility
-        job_ticket = job_data.get("Ticket#", job_data.get("Job Ticket#", ""))
         quantity = job_data.get("Qty", job_data.get("Quantity", ""))
+        
+        # Format quantity with commas for display in table
+        formatted_quantity = quantity
+        if quantity and str(quantity).isdigit():
+            formatted_quantity = f"{int(quantity):,}"
         
         row_items = [
             QStandardItem(job_data.get("Customer", "")),
@@ -213,13 +233,13 @@ class JobPageWidget(QWidget):
             QStandardItem(job_data.get("PO#", "")),
             QStandardItem(job_data.get("Inlay Type", "")),
             QStandardItem(job_data.get("Label Size", "")),
-            QStandardItem(quantity),
+            QStandardItem(formatted_quantity),
             QStandardItem(due_date_formatted)
         ]
         self.model.appendRow(row_items)
         # Add the full job data to our source of truth list
-        if job_data not in self.all_jobs:
-            self.all_jobs.append(job_data)
+        self.all_jobs.append(job_data)
+        print(f"Added job to table: Ticket#{job_ticket}, PO#{po_number}")
 
     def format_date_for_display(self, date_string):
         """Convert date from ISO format (yyyy-mm-dd) to mm/dd/yyyy format."""
@@ -286,6 +306,14 @@ class JobPageWidget(QWidget):
         menu.addAction("Create Job Folder...", self.create_folder_for_selected_job_with_location_picker)
         menu.addAction("Edit Job", self.edit_selected_job_in_details)
         menu.addSeparator()
+        
+        # Check if job has UPC and can generate EPC database
+        selected_row_index = selection_model.selectedRows()[0]
+        job_data = self._get_job_data_for_row(selected_row_index.row())
+        upc = job_data.get("UPC Number", "")
+        if upc and validate_upc(upc):
+            menu.addAction("Generate EPC Database...", self.generate_epc_for_selected_job)
+            menu.addSeparator()
         
         menu.addAction("Move to Archive", self.move_to_archive)
         menu.addAction("Delete Job", self.delete_selected_job)
@@ -458,6 +486,153 @@ class JobPageWidget(QWidget):
         # Ensure monitoring continues after deletion
         self.ensure_directory_monitoring()
 
+    def generate_epc_for_selected_job(self):
+        """Generate EPC database files for an existing job."""
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+
+        selected_row_index = selection_model.selectedRows()[0]
+        job_data = self._get_job_data_for_row(selected_row_index.row())
+        
+        if not job_data:
+            QMessageBox.warning(self, "Error", "Could not retrieve job data.")
+            return
+        
+        upc = job_data.get("UPC Number", "")
+        if not upc or not validate_upc(upc):
+            QMessageBox.warning(self, "Invalid UPC", "Job does not have a valid 12-digit UPC.")
+            return
+        
+        # Create a simple dialog for EPC generation parameters
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QSpinBox, QDialogButtonBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Generate EPC Database")
+        dialog.setModal(True)
+        
+        layout = QVBoxLayout(dialog)
+        form_layout = QFormLayout()
+        
+        # Starting serial number
+        serial_spin = QSpinBox()
+        serial_spin.setRange(1, 999999999)
+        serial_spin.setValue(int(job_data.get("Serial Number", "1")))
+        form_layout.addRow("Starting Serial Number:", serial_spin)
+        
+        # Total quantity
+        qty_spin = QSpinBox()
+        qty_spin.setRange(1, 999999999)
+        base_qty = job_data.get("Quantity", job_data.get("Qty", "0"))
+        if isinstance(base_qty, str) and base_qty.replace(',', '').isdigit():
+            qty_spin.setValue(int(base_qty.replace(',', '')))
+        form_layout.addRow("Total Quantity:", qty_spin)
+        
+        # Quantity per database file
+        qty_per_db_spin = QSpinBox()
+        qty_per_db_spin.setRange(100, 100000)
+        qty_per_db_spin.setValue(1000)
+        form_layout.addRow("Quantity per DB File:", qty_per_db_spin)
+        
+        # Percentage buffers
+        buffer_2_check = QCheckBox("Add 2% buffer")
+        buffer_7_check = QCheckBox("Add 7% buffer")
+        form_layout.addRow("Buffers:", buffer_2_check)
+        form_layout.addRow("", buffer_7_check)
+        
+        layout.addLayout(form_layout)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        # Get parameters from dialog
+        start_serial = serial_spin.value()
+        base_qty = qty_spin.value()
+        qty_per_db = qty_per_db_spin.value()
+        include_2_percent = buffer_2_check.isChecked()
+        include_7_percent = buffer_7_check.isChecked()
+        
+        # Calculate total quantity with buffers
+        total_qty = calculate_total_quantity_with_percentages(
+            base_qty, include_2_percent, include_7_percent
+        )
+        
+        # Determine where to save the EPC files
+        job_folder_path = job_data.get('job_folder_path')
+        if not job_folder_path or not os.path.exists(job_folder_path):
+            QMessageBox.warning(self, "Path Error", "Job folder path not found or does not exist.")
+            return
+        
+        # Check if this job already has EPC structure
+        upc_folder_path = job_data.get('upc_folder_path')
+        if upc_folder_path and os.path.exists(upc_folder_path):
+            # Use existing EPC structure
+            data_folder_path = job_data.get('data_folder_path', os.path.join(upc_folder_path, "data"))
+        else:
+            # Create a data folder in the main job folder
+            data_folder_path = os.path.join(job_folder_path, "data")
+            os.makedirs(data_folder_path, exist_ok=True)
+        
+        try:
+            # Generate EPC database files
+            created_files = generate_epc_database_files(
+                upc, start_serial, total_qty, qty_per_db, data_folder_path
+            )
+            
+            # Update job data with EPC information
+            job_data['epc_files_created'] = len(created_files)
+            job_data['total_qty_with_buffers'] = total_qty
+            job_data['epc_generation_date'] = datetime.now().isoformat()
+            
+            # Save updated job data
+            job_data_path = os.path.join(job_folder_path, "job_data.json")
+            with open(job_data_path, "w") as f:
+                json.dump(job_data, f, indent=4)
+            
+            # Update the in-memory data
+            self.all_jobs[selected_row_index.row()] = job_data
+            
+            # Also update active source directory if it exists
+            try:
+                customer = job_data.get("Customer", "")
+                label_size = job_data.get("Label Size", "")
+                folder_name = os.path.basename(job_folder_path)
+                active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, folder_name)
+                
+                if os.path.exists(active_source_path):
+                    # Update the job_data.json in active source
+                    active_job_data_path = os.path.join(active_source_path, "job_data.json")
+                    with open(active_job_data_path, "w") as f:
+                        json.dump(job_data, f, indent=4)
+                    
+                    # Copy new EPC files to active source
+                    active_data_path = os.path.join(active_source_path, "data")
+                    if not os.path.exists(active_data_path):
+                        os.makedirs(active_data_path, exist_ok=True)
+                    
+                    for file_path in created_files:
+                        file_name = os.path.basename(file_path)
+                        shutil.copy2(file_path, os.path.join(active_data_path, file_name))
+            except Exception as e:
+                print(f"Warning: Could not update active source directory: {e}")
+            
+            QMessageBox.information(
+                self, 
+                "EPC Generation Complete", 
+                f"Successfully generated {len(created_files)} EPC database files.\n"
+                f"Total quantity (with buffers): {total_qty:,}\n"
+                f"Files saved to: {data_folder_path}"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(self, "EPC Generation Error", f"Failed to generate EPC database:\n{e}")
+
     def _get_job_data_for_row(self, row):
         if 0 <= row < len(self.all_jobs):
             return self.all_jobs[row]
@@ -564,7 +739,19 @@ class JobPageWidget(QWidget):
                             elif data_key == "Ticket#":
                                 value = self.get_job_data_value(job_data, "Ticket#", "Job Ticket#")
                             elif data_key == "Qty":
-                                value = self.get_job_data_value(job_data, "Qty", "Quantity")
+                                qty_value = self.get_job_data_value(job_data, "Qty", "Quantity")
+                                # Format quantity with commas for display in PDF
+                                if qty_value and qty_value.isdigit():
+                                    value = f"{int(qty_value):,}"
+                                else:
+                                    value = qty_value
+                            elif data_key == "UPC Number":
+                                upc_value = job_data.get(data_key, "")
+                                # Format UPC with spaces for display in PDF
+                                if upc_value and len(upc_value) == 12 and upc_value.isdigit():
+                                    value = f"{upc_value[:3]} {upc_value[3:6]} {upc_value[6:9]} {upc_value[9:12]}"
+                                else:
+                                    value = upc_value
                             else:
                                 value = job_data.get(data_key, "")
                             
@@ -612,6 +799,14 @@ class JobPageWidget(QWidget):
                         # Special handling for Due Date formatting
                         if header == "Due Date":
                             formatted_value = self.format_date_for_display(updated_job_data[header])
+                            item = QStandardItem(formatted_value)
+                        # Special handling for Qty formatting
+                        elif header == "Qty":
+                            qty_value = updated_job_data[header]
+                            if qty_value and str(qty_value).isdigit():
+                                formatted_value = f"{int(qty_value):,}"
+                            else:
+                                formatted_value = str(qty_value)
                             item = QStandardItem(formatted_value)
                         else:
                             item = QStandardItem(str(updated_job_data[header]))
@@ -672,6 +867,7 @@ class JobPageWidget(QWidget):
              QMessageBox.warning(self, "Delete Error", f"Could not delete active source job folder.\n{e}")
 
     def create_job_folder_and_checklist(self, job_data):
+        """Enhanced job creation with EPC functionality and improved folder structure."""
         if job_data.get('Shared Drive'):
             base_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
         elif job_data.get('Desktop'):
@@ -685,55 +881,126 @@ class JobPageWidget(QWidget):
         try:
             customer = job_data.get("Customer")
             label_size = job_data.get("Label Size")
-            current_date = datetime.now().strftime("%y-%m-%d")
             po_num = job_data.get("PO#")
             job_ticket = self.get_job_data_value(job_data, "Ticket#", "Job Ticket#")
+            upc = job_data.get("UPC Number", "")
             
             if not all([customer, label_size, po_num, job_ticket]):
                 QMessageBox.warning(self, "Missing Information", "Customer, Label Size, PO#, and Ticket# are required to create a folder.")
                 return
 
-            job_folder_name = f"{current_date} - {po_num} - {job_ticket}"
-            customer_path = os.path.join(base_path, customer)
-            label_size_path = os.path.join(customer_path, label_size)
-            job_folder_path = os.path.join(label_size_path, job_folder_name)
+            # Determine whether to use EPC folder structure or traditional structure
+            enable_epc = job_data.get("Enable EPC Generation", False)
             
-            job_data['job_folder_path'] = job_folder_path
+            if enable_epc and upc and validate_upc(upc):
+                # Use EPC script's enhanced folder structure
+                folder_info = create_upc_folder_structure(
+                    base_path, customer, label_size, po_num, job_ticket, upc,
+                    config.get_template_base_path()
+                )
+                job_folder_path = folder_info['job_folder_path']
+                upc_folder_path = folder_info['upc_folder_path']
+                data_folder_path = folder_info['data_folder_path']
+                print_folder_path = folder_info['print_folder_path']
+                
+                job_data['job_folder_path'] = job_folder_path
+                job_data['upc_folder_path'] = upc_folder_path
+                job_data['data_folder_path'] = data_folder_path
+                job_data['print_folder_path'] = print_folder_path
+                
+                print(f"Successfully created EPC job structure: {job_folder_path}")
+                
+                # Generate EPC database files if requested
+                if job_data.get("Enable EPC Generation", False):
+                    try:
+                        start_serial = int(job_data.get("Serial Number", "1"))
+                        base_qty = int(job_data.get("Quantity", "0"))
+                        
+                        # Calculate total quantity with buffers
+                        total_qty = calculate_total_quantity_with_percentages(
+                            base_qty,
+                            job_data.get("Include 2% Buffer", False),
+                            job_data.get("Include 7% Buffer", False)
+                        )
+                        
+                        qty_per_db = int(job_data.get("Qty per DB", "1000"))
+                        
+                        created_files = generate_epc_database_files(
+                            upc, start_serial, total_qty, qty_per_db, data_folder_path
+                        )
+                        
+                        print(f"Generated {len(created_files)} EPC database files")
+                        job_data['epc_files_created'] = len(created_files)
+                        job_data['total_qty_with_buffers'] = total_qty
+                        
+                    except Exception as e:
+                        print(f"EPC database generation failed: {e}")
+                        QMessageBox.warning(self, "EPC Generation Warning", 
+                                          f"Job folder created successfully, but EPC database generation failed:\n{e}")
+                
+                # Save job data in the main job folder (not in UPC subfolder)
+                job_data_path = os.path.join(job_folder_path, "job_data.json")
+                
+            else:
+                # Use traditional folder structure for non-EPC jobs
+                current_date = datetime.now().strftime("%y-%m-%d")
+                job_folder_name = f"{current_date} - {po_num} - {job_ticket}"
+                customer_path = os.path.join(base_path, customer)
+                label_size_path = os.path.join(customer_path, label_size)
+                job_folder_path = os.path.join(label_size_path, job_folder_name)
+                
+                job_data['job_folder_path'] = job_folder_path
+                os.makedirs(job_folder_path, exist_ok=True)
+                print(f"Successfully created traditional job folder: {job_folder_path}")
+                
+                job_data_path = os.path.join(job_folder_path, "job_data.json")
 
-            os.makedirs(job_folder_path, exist_ok=True)
-            print(f"Successfully created job folder: {job_folder_path}")
-
-            # Save job data to a JSON file within the folder
+            # Save job data to JSON file
             try:
-                with open(os.path.join(job_folder_path, "job_data.json"), "w") as f:
+                with open(job_data_path, "w") as f:
                     json.dump(job_data, f, indent=4)
             except IOError as e:
                 QMessageBox.warning(self, "Save Error", f"Could not save job_data.json.\n{e}")
             
-            self.create_checklist_pdf(job_data, job_folder_path)
+            # Create checklist PDF in the appropriate location
+            checklist_location = job_folder_path  # Always in main job folder
+            self.create_checklist_pdf(job_data, checklist_location)
 
             # Copy to active jobs source directory
+            # Extract the final folder name for copying
+            final_folder_name = os.path.basename(job_folder_path)
             source_dest_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size)
             os.makedirs(source_dest_path, exist_ok=True)
             
             try:
-                shutil.copytree(job_folder_path, os.path.join(source_dest_path, job_folder_name))
-                print(f"Successfully copied job folder to: {os.path.join(source_dest_path, job_folder_name)}")
+                destination_path = os.path.join(source_dest_path, final_folder_name)
+                shutil.copytree(job_folder_path, destination_path)
+                print(f"Successfully copied job folder to: {destination_path}")
             except FileExistsError:
-                print(f"Folder already exists in active source, skipping copy: {os.path.join(source_dest_path, job_folder_name)}")
-                # For a new job, this indicates a likely duplicate. We should warn the user.
-                QMessageBox.warning(self, "Duplicate Warning", f"A folder with the same name already exists in the active source directory. The job was created in the primary location, but not copied.")
-                pass
+                print(f"Folder already exists in active source, skipping copy: {destination_path}")
+                QMessageBox.warning(self, "Duplicate Warning", 
+                                  f"A folder with the same name already exists in the active source directory. "
+                                  f"The job was created in the primary location, but not copied.")
             except Exception as e:
-                QMessageBox.warning(self, "Copy Error", f"Could not copy job folder to active source directory.\n\nError: {e}")
+                QMessageBox.warning(self, "Copy Error", 
+                                  f"Could not copy job folder to active source directory.\n\nError: {e}")
             
             # Ensure new directories are being monitored
             self.ensure_directory_monitoring()
+            
+            # Show success message with details
+            success_msg = f"Job created successfully at:\n{job_folder_path}"
+            if enable_epc and job_data.get('epc_files_created', 0) > 0:
+                success_msg += f"\n\nEPC Database files generated: {job_data['epc_files_created']}"
+                success_msg += f"\nTotal quantity (with buffers): {job_data.get('total_qty_with_buffers', 0):,}"
+            
+            QMessageBox.information(self, "Success", success_msg)
             
             return True # Indicate success
 
         except Exception as e:
             print(f"Job not created: {e}")
+            QMessageBox.critical(self, "Error", f"Could not create job:\n{e}")
             return False
 
     def closeEvent(self, event):
@@ -940,6 +1207,14 @@ class JobPageWidget(QWidget):
                 # Special handling for Due Date formatting
                 if header == "Due Date":
                     formatted_value = self.format_date_for_display(new_data[header])
+                    item = QStandardItem(formatted_value)
+                # Special handling for Qty formatting
+                elif header == "Qty":
+                    qty_value = new_data[header]
+                    if qty_value and str(qty_value).isdigit():
+                        formatted_value = f"{int(qty_value):,}"
+                    else:
+                        formatted_value = str(qty_value)
                     item = QStandardItem(formatted_value)
                 else:
                     item = QStandardItem(str(new_data[header]))
