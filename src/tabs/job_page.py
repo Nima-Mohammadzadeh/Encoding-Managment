@@ -49,7 +49,7 @@ class JobPageWidget(QWidget):
         self.model = QStandardItemModel()
         self.headers = ([
         "Customer", "Part#", "Job Ticket#", "PO#",
-         "Inlay Type", "Label Size", "Quantity", "Status"
+         "Inlay Type", "Label Size", "Quantity", "Due Date"
         ])      
         self.model.setHorizontalHeaderLabels(self.headers)
 
@@ -70,7 +70,7 @@ class JobPageWidget(QWidget):
         header.setSectionResizeMode(self.headers.index("Inlay Type"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("Label Size"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("Quantity"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Status"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Due Date"), QHeaderView.ResizeMode.ResizeToContents)
         self.jobs_table.verticalHeader().hide()
        
         layout.addWidget(self.jobs_table)
@@ -95,7 +95,7 @@ class JobPageWidget(QWidget):
         else:
             print("job not created")
 
-    def add_job_to_table(self, job_data, status="New"):
+    def add_job_to_table(self, job_data):
         # This function will now just handle the view
         row_items = [
             QStandardItem(job_data.get("Customer", "")),
@@ -105,7 +105,7 @@ class JobPageWidget(QWidget):
             QStandardItem(job_data.get("Inlay Type", "")),
             QStandardItem(job_data.get("Label Size", "")),
             QStandardItem(job_data.get("Quantity", "")),
-            QStandardItem(job_data.get("Status", "New"))
+            QStandardItem(job_data.get("Due Date", ""))
         ]
         self.model.appendRow(row_items)
         # Add the full job data to our source of truth list
@@ -122,7 +122,7 @@ class JobPageWidget(QWidget):
                 self.all_jobs = json.load(f)
                 
             for job in self.all_jobs:
-                self.add_job_to_table(job, status=job.get("Status", "New"))
+                self.add_job_to_table(job)
         except Exception as e:
             print("Error loading jobs:", e)
 
@@ -144,36 +144,10 @@ class JobPageWidget(QWidget):
         menu.addAction("Edit Job", self.edit_selected_job)
         menu.addSeparator()
         
-        
-        submenu = QMenu("Change Status:", self)
-        submenu.addAction("New", self.set_status("New"))
-        submenu.addAction("In Progress", self.set_status("In Progress"))
-        submenu.addAction("On Hold", self.set_status("On Hold"))
-        submenu.addAction("Completed", self.set_status("Completed"))
-        submenu.addAction("Cancelled", self.set_status("Cancelled"))
-        menu.addMenu(submenu)
-
-        menu.addSeparator()
-
         menu.addAction("Move to Archive", self.move_to_archive)
         menu.addAction("Delete Job", self.delete_selected_job)
 
         menu.exec(event.globalPos())
-
-    def set_status(self, status):
-        def update_status():
-            selection_model = self.jobs_table.selectionModel()
-            if not selection_model.hasSelection():
-                return
-            
-            selected_row_index = selection_model.selectedRows()[0]
-            status_column = self.headers.index("Status")
-            status_index = self.model.index(selected_row_index.row(), status_column)
-            
-            self.model.setData(status_index, status, Qt.EditRole)
-            self.save_data()
-        
-        return update_status
 
     def create_folder_for_selected_job(self):
         selection_model = self.jobs_table.selectionModel()

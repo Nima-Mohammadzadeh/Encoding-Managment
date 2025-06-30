@@ -1,11 +1,11 @@
 import os
 import sys
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDateEdit
 from PySide6.QtWidgets import (
     QWizard, QWizardPage, QVBoxLayout, QFormLayout, QLineEdit, 
     QComboBox, QCheckBox, QPushButton, QLabel, QFileDialog, QSizePolicy, QWidget, QMessageBox, QHBoxLayout
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QDate
 from qt_material import apply_stylesheet
 
 class NewJobWizard(QWizard):
@@ -78,6 +78,9 @@ class JobDetailsPage(QWizardPage):
         self.job_ticket_number = QLineEdit()
         self.po_number = QLineEdit()
         self.qty = QLineEdit()
+        self.due_date = QDateEdit()
+        self.due_date.setCalendarPopup(True)
+        self.due_date.setDate(QDate.currentDate())
 
         self.get_lists()
 
@@ -89,6 +92,7 @@ class JobDetailsPage(QWizardPage):
         self.layout.addRow("PO#:", self.po_number)
         self.layout.addRow("Inlay Type:", self.inlay_type)
         self.layout.addRow("Label Size:", self.label_size)
+        self.layout.addRow("Due Date:", self.due_date)
     
         #
         #self.layout.addRow("Save Location:", save_location_widget)
@@ -118,6 +122,9 @@ class JobDetailsPage(QWizardPage):
         self.po_number.setText(data.get("PO#", ""))
         self.inlay_type.setCurrentText(data.get("Inlay Type", ""))
         self.label_size.setCurrentText(data.get("Label Size", ""))
+        due_date_str = data.get("Due Date", "")
+        if due_date_str:
+            self.due_date.setDate(QDate.fromString(due_date_str, Qt.DateFormat.ISODate))
         print(f"Data set: {data}")
 
     def _populate_combo_from_file(self, combo, file_path):
@@ -137,7 +144,8 @@ class JobDetailsPage(QWizardPage):
             "Job Ticket#": self.job_ticket_number.text(),
             "PO#": self.po_number.text(),
             "Inlay Type": self.inlay_type.currentText(),
-            "Label Size": self.label_size.currentText()
+            "Label Size": self.label_size.currentText(),
+            "Due Date": self.due_date.date().toString(Qt.DateFormat.ISODate)
         }
     
 

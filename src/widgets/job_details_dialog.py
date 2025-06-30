@@ -107,7 +107,7 @@ class JobDetailsDialog(QDialog):
         # Job Details Group
         job_details_group = QGroupBox("Job Information")
         form_layout = QFormLayout(job_details_group)
-        job_field_keys = ["Customer", "Part#", "Job Ticket#", "PO#", "Inlay Type", "Label Size", "Quantity"]
+        job_field_keys = ["Customer", "Part#", "Job Ticket#", "PO#", "Inlay Type", "Label Size", "Quantity", "Due Date"]
         for key in job_field_keys:
             label = QLabel(f"{key}:")
             value = QLabel(self.job_data.get(key, ''))
@@ -197,25 +197,15 @@ class JobDetailsDialog(QDialog):
         # Main horizontal layout for the two group boxes
         main_edit_layout = QHBoxLayout()
 
-        # Left side: Status and Job Details
+        # Left side: Job Details
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0,0,0,0)
-
-        # Status
-        status_group = QGroupBox("Job Status")
-        status_layout = QHBoxLayout(status_group)
-        self.status_combo = QComboBox()
-        self.status_combo.addItems(["New", "In Progress", "On Hold", "Completed", "Cancelled"])
-        self.status_combo.setCurrentText(self.job_data.get('Status', 'New'))
-        status_layout.addWidget(QLabel("Status:"))
-        status_layout.addWidget(self.status_combo)
-        left_layout.addWidget(status_group)
         
         # Job Details Group
         job_details_group = QGroupBox("Job Information")
         form_layout = QFormLayout(job_details_group)
-        job_field_keys = ["Customer", "Part#", "Job Ticket#", "PO#", "Inlay Type", "Label Size", "Quantity"]
+        job_field_keys = ["Customer", "Part#", "Job Ticket#", "PO#", "Inlay Type", "Label Size", "Quantity", "Due Date"]
         for key in job_field_keys:
             field = QLineEdit(self.job_data.get(key, ''))
             form_layout.addRow(f"{key}:", field)
@@ -263,7 +253,6 @@ class JobDetailsDialog(QDialog):
             updated_data[key] = field.text()
         for key, field in self.encoding_fields_edit.items():
             updated_data[key] = field.text()
-        updated_data['Status'] = self.status_combo.currentText()
         
         self.job_data.update(updated_data)
         self.job_updated.emit(self.job_data)

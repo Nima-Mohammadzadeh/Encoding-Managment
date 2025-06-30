@@ -1,1 +1,21 @@
-[]
+[
+    {
+        "Customer": "Peak Technologies",
+        "Part#": "123141",
+        "Job Ticket#": "13141",
+        "PO#": "1231245",
+        "Inlay Type": "EOS-261 Paper",
+        "Label Size": "1.85 x 0.91",
+        "Due Date": "2025-06-30",
+        "Serial Number": "q5001",
+        "UPC Number": "1312313123",
+        "Item": "testeq",
+        "Quantity": "50000",
+        "LPR": "5000",
+        "Rolls": "10",
+        "Shared Drive": false,
+        "Desktop": true,
+        "Custom Path": null,
+        "job_folder_path": "C:\\Users\\Encoding 3/Desktop\\Peak Technologies\\1.85 x 0.91\\25-06-30 - 1231245 - 13141"
+    }
+]

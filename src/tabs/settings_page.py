@@ -12,7 +12,10 @@ from PySide6.QtWidgets import (
     QListWidget,
     QDialog,
     QDialogButtonBox,
-    QInputDialog
+    QInputDialog,
+    QGridLayout,
+    QGroupBox,
+    QScrollArea
 )
 from PySide6.QtCore import Qt
 # We import our config module to get access to the settings object and keys
@@ -21,57 +24,85 @@ import src.config as config
 class SettingsPageWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        main_layout = QVBoxLayout(self)
-        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        main_layout.setContentsMargins(30, 30, 30, 30)
+        # ---------------------------
+        # Main Layout & Scroll Area
+        # ---------------------------
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(30, 30, 30, 30)
+        root_layout.setSpacing(15)
 
-        # --- Title ---
         title_label = QLabel("Application Settings")
-        title_label.setStyleSheet("font-size: 22px; font-weight: bold; margin-bottom: 25px;")
-        main_layout.addWidget(title_label)
+        title_label.setStyleSheet("font-size: 22px; font-weight: bold;")
+        root_layout.addWidget(title_label, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        # --- Directory Settings Section ---
-        dir_section = self.create_section_header("Directory Settings")
-        main_layout.addWidget(dir_section)
+        # A scroll area ensures the page remains usable on small screens
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        root_layout.addWidget(scroll)
+
+        scroll_container = QWidget()
+        scroll.setWidget(scroll_container)
+
+        scroll_layout = QVBoxLayout(scroll_container)
+        scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        scroll_layout.setSpacing(30)
+
+        # -------------
+        # Directory Group
+        # -------------
+        directory_group = QGroupBox("Directory Settings")
+        directory_group.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        dir_layout = QVBoxLayout(directory_group)
+        dir_layout.setSpacing(20)
 
         self.archive_dir_edit = self.create_directory_setting_row(
-            main_layout, "Archive Directory:", "Folder where completed jobs are moved.", config.ARCHIVE_DIR
+            dir_layout, "Archive Directory:", "Folder where completed jobs are moved.", config.ARCHIVE_DIR
         )
         self.templates_dir_edit = self.create_directory_setting_row(
-            main_layout, "Templates Directory:", "Folder containing document templates.", config.TEMPLATES_DIR
+            dir_layout, "Templates Directory:", "Folder containing document templates.", config.TEMPLATES_DIR
         )
 
-        main_layout.addSpacing(30)
+        scroll_layout.addWidget(directory_group)
 
-        # --- Job Wizard Data Section ---
-        data_section = self.create_section_header("Job Wizard Dropdown Data")
-        main_layout.addWidget(data_section)
+        # ------------------
+        # Data Manager Group
+        # ------------------
+        data_group = QGroupBox("Job Wizard Dropdown Data")
+        data_group.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        data_layout = QVBoxLayout(data_group)
+        data_layout.setSpacing(15)
 
         description = QLabel("Manage the options that appear in job wizard dropdown menus. Click a button to open the editor.")
-        description.setStyleSheet("color: grey; margin-bottom: 15px;")
+        description.setStyleSheet("color: grey;")
         description.setWordWrap(True)
-        main_layout.addWidget(description)
+        data_layout.addWidget(description)
 
         # Create buttons for each data type
-        self.create_data_manager_button(main_layout, "Manage Customer Names", 
-                                       "Edit the list of customer names", self.open_customer_manager)
-        self.create_data_manager_button(main_layout, "Manage Label Sizes", 
-                                       "Edit the list of label sizes", self.open_label_sizes_manager)
-        self.create_data_manager_button(main_layout, "Manage Inlay Types", 
-                                       "Edit the list of inlay types", self.open_inlay_types_manager)
+        self.create_data_manager_button(data_layout, "Manage Customer Names", 
+                                        "Edit the list of customer names", self.open_customer_manager)
+        self.create_data_manager_button(data_layout, "Manage Label Sizes", 
+                                        "Edit the list of label sizes", self.open_label_sizes_manager)
+        self.create_data_manager_button(data_layout, "Manage Inlay Types", 
+                                        "Edit the list of inlay types", self.open_inlay_types_manager)
 
-        main_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        scroll_layout.addWidget(data_group)
 
-        # --- Save Button ---
+        # Stretch to push content up within scroll
+        scroll_layout.addStretch()
+
+        # -----------
+        # Save Button
+        # -----------
         button_layout = QHBoxLayout()
         button_layout.addStretch()
+
         save_button = QPushButton("Save Directory Settings")
-        save_button.setFixedWidth(180)
-        save_button.setStyleSheet("font-weight: bold; padding: 8px;")
+        save_button.setFixedWidth(200)
+        save_button.setStyleSheet("font-weight: bold; padding: 10px 15px;")
         save_button.clicked.connect(self.save_directory_settings)
+
         button_layout.addWidget(save_button)
-        main_layout.addLayout(button_layout)
-        self.setLayout(main_layout)
+        root_layout.addLayout(button_layout)
 
     def create_section_header(self, title):
         """Create a styled section header."""
@@ -89,6 +120,7 @@ class SettingsPageWidget(QWidget):
         
         description_label = QLabel(description_text)
         description_label.setStyleSheet("font-size: 10pt; color: grey; margin-bottom: 8px;")
+        description_label.setWordWrap(True)
         container_layout.addWidget(description_label)
         
         input_layout = QHBoxLayout()
@@ -109,22 +141,26 @@ class SettingsPageWidget(QWidget):
 
     def create_data_manager_button(self, parent_layout, title, description, callback):
         """Create a button that opens a data manager popup."""
-        container_layout = QVBoxLayout()
-        
-        button_layout = QHBoxLayout()
+        container = QWidget()
+        grid_layout = QGridLayout(container)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+
         button = QPushButton(title)
         button.setMinimumHeight(40)
         button.setStyleSheet("text-align: left; padding: 10px; font-weight: bold;")
         button.clicked.connect(callback)
-        
+        button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+
         info_label = QLabel(description)
         info_label.setStyleSheet("color: grey; font-size: 10pt; margin-left: 15px;")
+        info_label.setWordWrap(True)
+
+        grid_layout.addWidget(button, 0, 0)
+        grid_layout.addWidget(info_label, 0, 1)
         
-        button_layout.addWidget(button, 1)  # Take up most space
-        button_layout.addWidget(info_label, 2)  # Take up remaining space
-        
-        container_layout.addLayout(button_layout)
-        parent_layout.addLayout(container_layout)
+        grid_layout.setColumnStretch(1, 1) # Allow the label to take up remaining space
+
+        parent_layout.addWidget(container)
         parent_layout.addSpacing(10)
 
     def browse_for_directory(self, line_edit, title):
