@@ -257,8 +257,8 @@ class JobPageWidget(QWidget):
 
         menu = QMenu(self)
 
-        menu.addAction("Create Job Folder", self.create_folder_for_selected_job)
-        menu.addAction("Edit Job", self.edit_selected_job)
+        menu.addAction("Create Job Folder...", self.create_folder_for_selected_job_with_location_picker)
+        menu.addAction("Edit Job", self.edit_selected_job_in_details)
         menu.addSeparator()
         
         menu.addAction("Move to Archive", self.move_to_archive)
@@ -266,7 +266,8 @@ class JobPageWidget(QWidget):
 
         menu.exec(event.globalPos())
 
-    def create_folder_for_selected_job(self):
+    def create_folder_for_selected_job_with_location_picker(self):
+        """Create job folder with user-selected directory location."""
         selection_model = self.jobs_table.selectionModel()
         if not selection_model.hasSelection():
             return
@@ -278,94 +279,88 @@ class JobPageWidget(QWidget):
             cell_index = self.model.index(selected_row_index.row(), col)
             job_data[header] = self.model.data(cell_index, Qt.DisplayRole)
 
-        # Use default network path for context menu folder creation
-        self._create_job_folders(job_data, [self.network_path])
-
-    def _create_job_folders(self, job_data, save_locations=None):
+        # Let user select where to create the job folder
+        directory = QFileDialog.getExistingDirectory(
+            self, 
+            "Select Directory to Create Job Folder", 
+            "", 
+            QFileDialog.Option.ShowDirsOnly
+        )
+        
+        if not directory:
+            return  # User cancelled
+        
         try:
-            # If no save_locations provided, fall back to the default network path
-            if not save_locations:
-                save_locations = [self.network_path]
-                  
-            current_date = datetime.now().strftime("%y-%m-%d")
-            po_num = job_data.get("PO#", "UnknownPO")
-            job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
             customer = job_data.get("Customer", "UnknownCustomer")
             label_size = job_data.get("Label Size", "UnknownLabelSize")
+            po_num = job_data.get("PO#", "UnknownPO")
+            job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
+            
+            # Use current date for folder creation
+            current_date = datetime.now().strftime("%y-%m-%d")
             job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
-
-            created_folders = []
             
-            for save_location in save_locations:
-                if not os.path.exists(save_location):
-                    QMessageBox.critical(self, "Error", f"Save location not accessible: {save_location}")
-                    continue
-                    
-                customer_path = os.path.join(save_location, customer)
-                label_size_path = os.path.join(customer_path, label_size)
-                job_path = os.path.join(label_size_path, job_folder_name)
-                
-                # For custom paths, create the directory structure if it doesn't exist
-                if save_location != self.network_path:
-                    if not os.path.exists(customer_path):
-                        os.makedirs(customer_path)
-                        print(f"Created customer directory: {customer_path}")
-                    
-                    if not os.path.exists(label_size_path):
-                        os.makedirs(label_size_path)
-                        print(f"Created label size directory: {label_size_path}")
-                else:
-                    # For network path, require existing structure
-                    if not os.path.exists(customer_path):
-                        QMessageBox.critical(self, "Error", f"Customer folder not found: {customer}\nPlease make sure the customer folder exists in the network drive.")
-                        continue
-                        
-                    if not os.path.exists(label_size_path):
-                        QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\nPlease make sure the label size folder exists in the customer directory.")
-                        continue
-                
-                if os.path.exists(job_path):
-                    QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
-                    continue
-                    
-                os.makedirs(job_path)
-                created_folders.append(job_path)
-                print(f"Successfully created job folder: {job_path}")
-
-                # Return the first successfully created job path for checklist generation
-                if created_folders:
-                    return created_folders[0]
+            # Create the directory structure: Selected Dir / Customer / Label Size / Job Folder
+            customer_path = os.path.join(directory, customer)
+            label_size_path = os.path.join(customer_path, label_size)
+            job_path = os.path.join(label_size_path, job_folder_name)
             
-            if created_folders:
-                folder_list = "\n".join(created_folders)
-                QMessageBox.information(self, "Success", f"Job folder(s) created at:\n{folder_list}")
-            else:
-                QMessageBox.warning(self, "Warning", "No job folders were created.")
-                return None
+            # Create directories if they don't exist
+            os.makedirs(customer_path, exist_ok=True)
+            os.makedirs(label_size_path, exist_ok=True)
+            
+            if os.path.exists(job_path):
+                QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
+                return
+            
+            os.makedirs(job_path)
+            
+            # Get the full job data for creating JSON and PDF
+            full_job_data = self._get_job_data_for_row(selected_row_index.row())
+            if full_job_data:
+                # Save job data JSON in the new folder
+                full_job_data['job_folder_path'] = job_path
+                try:
+                    with open(os.path.join(job_path, "job_data.json"), "w") as f:
+                        json.dump(full_job_data, f, indent=4)
+                except IOError as e:
+                    print(f"Could not save job_data.json: {e}")
                 
+                # Create checklist PDF
+                self.create_checklist_pdf(full_job_data, job_path)
+            
+            QMessageBox.information(self, "Success", f"Job folder created successfully at:\n{job_path}")
+            print(f"Successfully created job folder: {job_path}")
+            
         except Exception as e:
             print(f"Error creating job folder: {e}")
             QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
-            return None
 
-    def edit_selected_job(self):
+    def edit_selected_job_in_details(self):
+        """Open the job details dialog in edit mode for the selected job."""
         selection_model = self.jobs_table.selectionModel()
         if not selection_model.hasSelection():
             return
+            
         selected_row_index = selection_model.selectedRows()[0]
+        job_data = self._get_job_data_for_row(selected_row_index.row())
         
-        current_data = self._get_job_data_for_row(selected_row_index.row())
-
-        wizard = NewJobWizard(self, base_path=self.base_path)
-        wizard.setWindowTitle("Edit Job")
-        wizard.set_all_data(current_data)
-
-        wizard.page(2).setVisible(False)
-
-
-        if wizard.exec():
-            new_data = wizard.get_data()
-            self._update_job(selected_row_index.row(), new_data)
+        if not job_data:
+            QMessageBox.warning(self, "Error", "Could not retrieve job data.")
+            return
+        
+        # Create and show the job details dialog
+        dialog = JobDetailsDialog(job_data, self.base_path, self)
+        
+        # Connect signals to handle updates
+        dialog.job_updated.connect(self.update_job_in_table)
+        dialog.job_archived.connect(self.handle_job_archived)
+        dialog.job_deleted.connect(lambda: self.delete_job_by_row(selected_row_index.row()))
+        
+        # Automatically enter edit mode
+        dialog.enter_edit_mode()
+        
+        dialog.exec()
 
     def delete_selected_job(self):
         selection_model = self.jobs_table.selectionModel()
@@ -757,3 +752,106 @@ class JobPageWidget(QWidget):
         # Re-setup monitoring if directory has changed
         if active_source_dir not in self.file_watcher.directories():
             self.setup_directory_monitoring()
+
+    def edit_selected_job(self):
+        """Original edit job method using wizard (kept for backward compatibility)."""
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+        selected_row_index = selection_model.selectedRows()[0]
+        
+        current_data = self._get_job_data_for_row(selected_row_index.row())
+
+        wizard = NewJobWizard(self, base_path=self.base_path)
+        wizard.setWindowTitle("Edit Job")
+        wizard.set_all_data(current_data)
+
+        wizard.page(2).setVisible(False)
+
+        if wizard.exec():
+            new_data = wizard.get_data()
+            self._update_job(selected_row_index.row(), new_data)
+
+    def create_folder_for_selected_job(self):
+        """Original create folder method (kept for backward compatibility)."""
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+
+        selected_row_index = selection_model.selectedRows()[0]
+        
+        job_data = {}
+        for col, header in enumerate(self.headers):
+            cell_index = self.model.index(selected_row_index.row(), col)
+            job_data[header] = self.model.data(cell_index, Qt.DisplayRole)
+
+        # Use default network path for context menu folder creation
+        self._create_job_folders(job_data, [self.network_path])
+
+    def _create_job_folders(self, job_data, save_locations=None):
+        """Create job folders in specified locations (kept for backward compatibility)."""
+        try:
+            # If no save_locations provided, fall back to the default network path
+            if not save_locations:
+                save_locations = [self.network_path]
+                  
+            current_date = datetime.now().strftime("%y-%m-%d")
+            po_num = job_data.get("PO#", "UnknownPO")
+            job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
+            customer = job_data.get("Customer", "UnknownCustomer")
+            label_size = job_data.get("Label Size", "UnknownLabelSize")
+            job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
+
+            created_folders = []
+            
+            for save_location in save_locations:
+                if not os.path.exists(save_location):
+                    QMessageBox.critical(self, "Error", f"Save location not accessible: {save_location}")
+                    continue
+                    
+                customer_path = os.path.join(save_location, customer)
+                label_size_path = os.path.join(customer_path, label_size)
+                job_path = os.path.join(label_size_path, job_folder_name)
+                
+                # For custom paths, create the directory structure if it doesn't exist
+                if save_location != self.network_path:
+                    if not os.path.exists(customer_path):
+                        os.makedirs(customer_path)
+                        print(f"Created customer directory: {customer_path}")
+                    
+                    if not os.path.exists(label_size_path):
+                        os.makedirs(label_size_path)
+                        print(f"Created label size directory: {label_size_path}")
+                else:
+                    # For network path, require existing structure
+                    if not os.path.exists(customer_path):
+                        QMessageBox.critical(self, "Error", f"Customer folder not found: {customer}\nPlease make sure the customer folder exists in the network drive.")
+                        continue
+                        
+                    if not os.path.exists(label_size_path):
+                        QMessageBox.critical(self, "Error", f"Label size folder not found for customer {customer}: {label_size}\nPlease make sure the label size folder exists in the customer directory.")
+                        continue
+                
+                if os.path.exists(job_path):
+                    QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
+                    continue
+                    
+                os.makedirs(job_path)
+                created_folders.append(job_path)
+                print(f"Successfully created job folder: {job_path}")
+
+                # Return the first successfully created job path for checklist generation
+                if created_folders:
+                    return created_folders[0]
+            
+            if created_folders:
+                folder_list = "\n".join(created_folders)
+                QMessageBox.information(self, "Success", f"Job folder(s) created at:\n{folder_list}")
+            else:
+                QMessageBox.warning(self, "Warning", "No job folders were created.")
+                return None
+                
+        except Exception as e:
+            print(f"Error creating job folder: {e}")
+            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
+            return None
