@@ -101,7 +101,7 @@ class JobDetailsDialog(QDialog):
         return header_widget
         
     def populate_overview_tab(self):
-        layout = QVBoxLayout(self.overview_tab)
+        layout = QHBoxLayout(self.overview_tab)
         layout.setContentsMargins(15, 15, 15, 15)
         
         # Job Details Group
@@ -128,8 +128,6 @@ class JobDetailsDialog(QDialog):
             self.encoding_fields_read[key] = value
         layout.addWidget(encoding_details_group)
         
-        layout.addStretch()
-
     def populate_file_manager_tab(self):
         layout = QVBoxLayout(self.file_manager_tab)
         layout.setContentsMargins(15, 15, 15, 15)
@@ -196,6 +194,14 @@ class JobDetailsDialog(QDialog):
         layout = QVBoxLayout(self.edit_tab)
         layout.setContentsMargins(15, 15, 15, 15)
 
+        # Main horizontal layout for the two group boxes
+        main_edit_layout = QHBoxLayout()
+
+        # Left side: Status and Job Details
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0,0,0,0)
+
         # Status
         status_group = QGroupBox("Job Status")
         status_layout = QHBoxLayout(status_group)
@@ -204,7 +210,7 @@ class JobDetailsDialog(QDialog):
         self.status_combo.setCurrentText(self.job_data.get('Status', 'New'))
         status_layout.addWidget(QLabel("Status:"))
         status_layout.addWidget(self.status_combo)
-        layout.addWidget(status_group)
+        left_layout.addWidget(status_group)
         
         # Job Details Group
         job_details_group = QGroupBox("Job Information")
@@ -214,8 +220,14 @@ class JobDetailsDialog(QDialog):
             field = QLineEdit(self.job_data.get(key, ''))
             form_layout.addRow(f"{key}:", field)
             self.job_fields_edit[key] = field
-        layout.addWidget(job_details_group)
-        
+        left_layout.addWidget(job_details_group)
+        left_layout.addStretch()
+
+        # Right side: Encoding Details
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(0,0,0,0)
+
         # Encoding Details Group
         encoding_details_group = QGroupBox("Encoding Information")
         encoding_form_layout = QFormLayout(encoding_details_group)
@@ -224,8 +236,13 @@ class JobDetailsDialog(QDialog):
             field = QLineEdit(self.job_data.get(key, ''))
             encoding_form_layout.addRow(f"{key}:", field)
             self.encoding_fields_edit[key] = field
-        layout.addWidget(encoding_details_group)
-        
+        right_layout.addWidget(encoding_details_group)
+        right_layout.addStretch()
+
+        main_edit_layout.addWidget(left_widget)
+        main_edit_layout.addWidget(right_widget)
+        layout.addLayout(main_edit_layout)
+
         # Save/Cancel Buttons
         button_layout = QHBoxLayout()
         save_btn = QPushButton("Save Changes")
@@ -239,7 +256,6 @@ class JobDetailsDialog(QDialog):
         button_layout.addWidget(cancel_btn)
         button_layout.addWidget(save_btn)
         layout.addLayout(button_layout)
-        layout.addStretch()
         
     def save_changes(self):
         updated_data = {}
@@ -277,10 +293,25 @@ class JobDetailsDialog(QDialog):
             self.load_job_data()
             QMessageBox.information(self, "Job Completed", "The job status has been set to 'Completed'.")
 
+            # Ask to archive
+            archive_reply = QMessageBox.question(self, "Archive Job", 
+                                               "Would you like to archive this completed job now?",
+                                               QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if archive_reply == QMessageBox.StandardButton.Yes:
+                self.archive_job()
+
     def find_job_directory(self):
+        # First, check if the path is already stored in job_data
+        if 'job_folder_path' in self.job_data and os.path.exists(self.job_data['job_folder_path']):
+            return self.job_data['job_folder_path']
+            
+        # If not, fall back to searching for it
         job_paths = self.find_job_directories()
         for path in job_paths.values():
             if path and os.path.exists(path):
+                # Optional: Store the found path for future use
+                self.job_data['job_folder_path'] = path
+                self.job_updated.emit(self.job_data) # Let the main page know to save it
                 return path
         return None
 
@@ -314,7 +345,7 @@ class JobDetailsDialog(QDialog):
             self.open_path_in_explorer(job_path)
 
     def find_job_directories(self):
-        # This is a simplified version for brevity. You can use your more complex one.
+        # Enhanced version that considers all possible save locations from job data
         customer = self.job_data.get('Customer', '')
         label_size = self.job_data.get('Label Size', '')
         po_num = self.job_data.get('PO#', '')
@@ -322,14 +353,26 @@ class JobDetailsDialog(QDialog):
         
         if not all([customer, label_size, po_num, job_ticket]):
             return {}
+        
+        # Build list of possible locations based on job data
+        locations = {}
+        
+        # Always check network drive and desktop
+        locations['shared_drive'] = self.network_path
+        locations['desktop'] = os.path.expanduser("~/Desktop")
+        
+        # Also check custom path if it exists in job data
+        if self.job_data.get('Custom Path'):
+            locations['custom'] = self.job_data['Custom Path']
             
-        locations = {'shared_drive': self.network_path, 'desktop': os.path.expanduser("~/Desktop")}
         found_paths = {}
 
         for loc, base_path in locations.items():
             try:
-                if os.path.exists(os.path.join(base_path, customer, label_size)):
-                    label_path = os.path.join(base_path, customer, label_size)
+                customer_path = os.path.join(base_path, customer)
+                label_path = os.path.join(customer_path, label_size)
+                
+                if os.path.exists(label_path):
                     for folder in os.listdir(label_path):
                         if po_num in folder and job_ticket in folder:
                             found_paths[loc] = os.path.join(label_path, folder)
@@ -379,42 +422,29 @@ class JobDetailsDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Could not open path: {e}")
     
     def archive_job(self):
-        reply = QMessageBox.question(self, "Archive Job", 
+        reply = QMessageBox.question(self, "Archive Job",
                                    "This will move the job's folder to the archive and remove it from the active list.\n\nAre you sure you want to proceed?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        
+
         if reply == QMessageBox.StandardButton.Yes:
-            job_folder_path = self.find_job_directory()
+            # The dialog's responsibility is to signal the request, not perform the move.
+            # The main window orchestrates the move by telling the archive page.
             
-            # Move the job folder if it exists
-            if job_folder_path and os.path.exists(job_folder_path):
-                try:
-                    archive_dir = config.ARCHIVE_DIR
-                    destination_path = os.path.join(archive_dir, os.path.basename(job_folder_path))
-                    
-                    os.makedirs(archive_dir, exist_ok=True)
-                    
-                    # Prevent overwriting by making the destination path unique if it already exists
-                    if os.path.exists(destination_path):
-                        timestamp = datetime.now().strftime("_%Y%m%d%H%M%S")
-                        destination_path += timestamp
+            # Find the job folder path to ensure it's in the job_data payload.
+            job_folder_path = self.find_job_directory()
 
-                    shutil.move(job_folder_path, destination_path)
-                    QMessageBox.information(self, "Folder Moved", 
-                                          f"The job folder has been successfully moved to:\n{destination_path}")
-
-                except Exception as e:
-                    QMessageBox.warning(self, "Move Error", 
-                                        f"Could not move the job folder. It will be archived without moving the files.\n\nError: {e}")
-            else:
+            if not job_folder_path:
                  QMessageBox.information(self, "No Folder Found",
-                                        "No job folder was found to move. The job data will be archived.")
+                                        "No job folder was found. The job data will be archived without moving any files.")
+            else:
+                # Make sure the path is in the data we are about to emit
+                self.job_data['job_folder_path'] = job_folder_path
 
-            # Proceed with archiving the job data regardless of folder status
+            # Proceed with archiving the job data.
             self.job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             self.job_archived.emit(self.job_data)
             self.accept()
-            
+
     def delete_job(self):
         reply = QMessageBox.question(self, "Delete Job", "This action cannot be undone. Are you sure?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -424,7 +454,18 @@ class JobDetailsDialog(QDialog):
             self.accept()
 
     def create_job_directory(self):
-        # Re-using logic, assuming network path is the primary target
+        # Determine the base path from the job data
+        if self.job_data.get('Shared Drive'):
+            base_path = self.network_path
+        elif self.job_data.get('Desktop'):
+            base_path = os.path.expanduser("~/Desktop")
+        elif self.job_data.get('Custom Path'):
+            base_path = self.job_data['Custom Path']
+        else:
+            # Default or error
+            QMessageBox.warning(self, "No Path", "No valid save location (Desktop, Shared Drive, or Custom) is set for this job.")
+            return
+            
         try:
             customer = self.job_data.get("Customer")
             label_size = self.job_data.get("Label Size")
@@ -433,13 +474,15 @@ class JobDetailsDialog(QDialog):
             job_ticket = self.job_data.get("Job Ticket#")
             job_folder_name = f"{current_date} - {po_num} - {job_ticket}"
             
-            customer_path = os.path.join(self.network_path, customer)
+            customer_path = os.path.join(base_path, customer)
             label_size_path = os.path.join(customer_path, label_size)
             job_path = os.path.join(label_size_path, job_folder_name)
             
-            if not os.path.exists(customer_path) or not os.path.exists(label_size_path):
-                 QMessageBox.warning(self, "Missing Folders", "Customer or Label Size folder does not exist on the network drive.")
-                 return
+            # Check if the parent directories exist before creating the final job folder
+            if not os.path.exists(customer_path):
+                os.makedirs(customer_path)
+            if not os.path.exists(label_size_path):
+                os.makedirs(label_size_path)
 
             os.makedirs(job_path, exist_ok=True)
             QMessageBox.information(self, "Success", f"Job folder created:\n{job_path}")

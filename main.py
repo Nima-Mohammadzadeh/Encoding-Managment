@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QLabel,
     QListWidgetItem,
-    QFileDialog,
+    QFileDialog,    
     QMessageBox
 )
 import pymupdf, shutil, os, sys

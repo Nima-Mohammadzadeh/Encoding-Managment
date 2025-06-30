@@ -36,6 +36,7 @@ class JobPageWidget(QWidget):
         self.base_path = base_path
         self.save_file = os.path.join(self.base_path, "data", "active_jobs.json")
         self.network_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
+        self.all_jobs = [] # This will be the source of truth
         layout = QVBoxLayout(self)
 
         actions_layout = QHBoxLayout()
@@ -86,13 +87,16 @@ class JobPageWidget(QWidget):
 
         if wizard.exec():
             job_data = wizard.get_data()
-            save_locations = wizard.get_save_locations()
-            print("New Job Made: ", job_data)
-            self.handle_new_job_creation(job_data, save_locations)            
+            # Create the job folder first and set the job_folder_path
+            self.create_job_folder_and_checklist(job_data)
+            # Then add to table and save (now with the job_folder_path included)
+            self.add_job_to_table(job_data)
+            self.save_data()
         else:
             print("job not created")
 
     def add_job_to_table(self, job_data, status="New"):
+        # This function will now just handle the view
         row_items = [
             QStandardItem(job_data.get("Customer", "")),
             QStandardItem(job_data.get("Part#", "")),
@@ -101,9 +105,12 @@ class JobPageWidget(QWidget):
             QStandardItem(job_data.get("Inlay Type", "")),
             QStandardItem(job_data.get("Label Size", "")),
             QStandardItem(job_data.get("Quantity", "")),
-            QStandardItem(status)
+            QStandardItem(job_data.get("Status", "New"))
         ]
         self.model.appendRow(row_items)
+        # Add the full job data to our source of truth list
+        if job_data not in self.all_jobs:
+            self.all_jobs.append(job_data)
 
     def load_jobs(self):
         if not os.path.exists(self.save_file):
@@ -112,27 +119,17 @@ class JobPageWidget(QWidget):
 
         try:
             with open(self.save_file, "r") as f:
-                data = json.load(f)
+                self.all_jobs = json.load(f)
                 
-            for job in data:
-                status = job.pop("Status", "")
-                self.add_job_to_table(job, status=status)
+            for job in self.all_jobs:
+                self.add_job_to_table(job, status=job.get("Status", "New"))
         except Exception as e:
             print("Error loading jobs:", e)
 
     def save_data(self):
-        data_to_save = []
-
-        for row_index in range(self.model.rowCount()):
-            job_data = {}
-            for col, header in enumerate(self.headers):
-                item = self.model.item(row_index, col)
-                job_data[header] = item.text() if item else ""
-            data_to_save.append(job_data)
-
         try:
             with open(self.save_file, "w") as f:
-                json.dump(data_to_save, f, indent=4)
+                json.dump(self.all_jobs, f, indent=4)
         except IOError as e:
             print(f"Error saving data: {e}")
 
@@ -299,35 +296,44 @@ class JobPageWidget(QWidget):
 
             selected_row_index = selection_model.selectedRows()[0]
             self.model.removeRow(selected_row_index.row())
+            # Also remove from our source of truth
+            del self.all_jobs[selected_row_index.row()]
         
         self.save_data()
 
     def _get_job_data_for_row(self, row):
-        job_data = {}
-        for col, header in enumerate(self.headers):
-            item = self.model.item(row, col)
-            job_data[header] = item.text() if item else ""
-        return job_data
+        if 0 <= row < len(self.all_jobs):
+            return self.all_jobs[row]
+        return None
 
     def move_to_archive(self):
         selection_model = self.jobs_table.selectionModel()
         if not selection_model.hasSelection():
             return
+            
         reply = QMessageBox.question(self, "Confirmation", "Are you sure you want to move this job to the archive?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            selected_row = selection_model.selectedRows()[0].row()
+        if reply == QMessageBox.StandardButton.No:
+            return
 
-            job_data = self._get_job_data_for_row(selected_row)
-            
-            # Add archive date before emitting
-            job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        selected_row = selection_model.selectedRows()[0].row()
+        job_data = self._get_job_data_for_row(selected_row)
+        
+        job_folder_path = job_data.get('job_folder_path')
+        
+        if not job_folder_path or not os.path.exists(job_folder_path):
+            QMessageBox.warning(self, "Archive Error", "Original job folder not found or path not set. Cannot archive.")
+            return
 
-            self.job_to_archive.emit(job_data)
+        # Emit the job data to the archive page
+        self.job_to_archive.emit(job_data)
 
-            self.model.removeRow(selected_row)
-            
-            self.save_data() 
+        # Remove the job from the active list
+        self.model.removeRow(selected_row)
+        del self.all_jobs[selected_row]
+        self.save_data()
+        
+        QMessageBox.information(self, "Success", "Job has been successfully archived.")
 
     def handle_new_job_creation(self, job_data, save_locations):
         '''
@@ -342,7 +348,7 @@ class JobPageWidget(QWidget):
             
             self.add_job_to_table(job_data)
             
-            self._generate_checklist(job_data, job_path)
+            self.create_checklist_pdf(job_data, job_path)
 
 
             QMessageBox.information(self, "Success", "Job created successfully")
@@ -351,11 +357,10 @@ class JobPageWidget(QWidget):
             print(f"Error creating job folder: {e}")
             QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
 
-    def _generate_checklist(self, job_data, job_path):
-        '''
-        This function is called when a new job is created.
-        It will generate a checklist for the job.
-        '''
+    def create_checklist_pdf(self, job_data, job_path):
+        """
+        Generates a checklist for the job and saves it in the specified job_path.
+        """
         template_path = os.path.join(self.base_path, "data", "Encoding Checklist V4.1.pdf")
 
         if not os.path.exists(template_path):
@@ -387,10 +392,6 @@ class JobPageWidget(QWidget):
             doc = fitz.open(template_path)
             for page in doc:
                 for widget in page.widgets():
-                    # First, let's find the field names in your PDF
-                    print(f"Found PDF form field: '{widget.field_name}'")
-
-                    # Now, let's try to fill it
                     for data_key, pdf_key in fields_to_fill.items():
                         if widget.field_name == pdf_key:
                             value = ""
@@ -399,12 +400,10 @@ class JobPageWidget(QWidget):
                             else:
                                 value = job_data.get(data_key, "")
                             
-                            widget.field_value = value
+                            widget.field_value = str(value)
                             widget.update()
-                            break # Found and updated, move to the next widget
+                            break 
             
-            # The fields are filled, now we save the document.
-            # To make fields non-editable (flatten), use garbage=4.
             doc.save(save_path, garbage=4, deflate=True)
             doc.close()
             print(f"Checklist created successfully at:\n{save_path}")
@@ -433,16 +432,18 @@ class JobPageWidget(QWidget):
     def update_job_in_table(self, updated_job_data):
         """Update job data in the table"""
         # Find the row with matching job data and update it
-        for row in range(self.model.rowCount()):
-            current_job = self._get_job_data_for_row(row)
-            if (current_job.get('Job Ticket#') == updated_job_data.get('Job Ticket#') and
-                current_job.get('PO#') == updated_job_data.get('PO#')):
+        for i, job in enumerate(self.all_jobs):
+            if (job.get('Job Ticket#') == updated_job_data.get('Job Ticket#') and
+                job.get('PO#') == updated_job_data.get('PO#')):
                 
-                # Update the row with new data
+                # Update the source of truth
+                self.all_jobs[i] = updated_job_data
+                
+                # Update the view
                 for col, header in enumerate(self.headers):
                     if header in updated_job_data:
-                        item = QStandardItem(updated_job_data[header])
-                        self.model.setItem(row, col, item)
+                        item = QStandardItem(str(updated_job_data[header]))
+                        self.model.setItem(i, col, item)
                 break
         self.save_data()
         
@@ -450,16 +451,73 @@ class JobPageWidget(QWidget):
         """Handle job being archived from details dialog"""
         self.job_to_archive.emit(job_data)
         # Remove from current table
-        for row in range(self.model.rowCount()):
-            current_job = self._get_job_data_for_row(row)
-            if (current_job.get('Job Ticket#') == job_data.get('Job Ticket#') and
-                current_job.get('PO#') == job_data.get('PO#')):
-                self.model.removeRow(row)
+        # Find the row with matching job data and remove it
+        for i, job in enumerate(self.all_jobs):
+            if (job.get('Job Ticket#') == job_data.get('Job Ticket#') and
+                job.get('PO#') == job_data.get('PO#')):
+                self.model.removeRow(i)
+                del self.all_jobs[i]
                 break
         self.save_data()
         
     def delete_job_by_row(self, row):
         """Delete job by row index"""
         if 0 <= row < self.model.rowCount():
+            job_data = self._get_job_data_for_row(row)
+            job_folder_path = job_data.get('job_folder_path')
+
+            reply = QMessageBox.question(self, "Delete Job", 
+                                       f"This will delete the job from the list. If a job folder exists, do you want to delete it as well?\n\nFolder: {job_folder_path}",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
+
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+
+            if reply == QMessageBox.StandardButton.Yes:
+                if job_folder_path and os.path.exists(job_folder_path):
+                    try:
+                        shutil.rmtree(job_folder_path)
+                        QMessageBox.information(self, "Folder Deleted", "The job folder has been deleted.")
+                    except Exception as e:
+                        QMessageBox.warning(self, "Folder Error", f"Could not delete the job folder.\n{e}")
+            
             self.model.removeRow(row)
+            del self.all_jobs[row]
             self.save_data()
+
+    def create_job_folder_and_checklist(self, job_data):
+        if job_data.get('Shared Drive'):
+            base_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
+        elif job_data.get('Desktop'):
+            base_path = os.path.expanduser("~/Desktop")
+        elif job_data.get('Custom Path'):
+            base_path = job_data['Custom Path']
+        else:
+            QMessageBox.warning(self, "Error", "No save location selected.")
+            return
+
+        try:
+            customer = job_data.get("Customer")
+            label_size = job_data.get("Label Size")
+            current_date = datetime.now().strftime("%y-%m-%d")
+            po_num = job_data.get("PO#")
+            job_ticket = job_data.get("Job Ticket#")
+            
+            if not all([customer, label_size, po_num, job_ticket]):
+                QMessageBox.warning(self, "Missing Information", "Customer, Label Size, PO#, and Job Ticket# are required to create a folder.")
+                return
+
+            job_folder_name = f"{current_date} - {po_num} - {job_ticket}"
+            customer_path = os.path.join(base_path, customer)
+            label_size_path = os.path.join(customer_path, label_size)
+            job_folder_path = os.path.join(label_size_path, job_folder_name)
+            
+            job_data['job_folder_path'] = job_folder_path
+
+            os.makedirs(job_folder_path, exist_ok=True)
+            print(f"Successfully created job folder: {job_folder_path}")
+            
+            self.create_checklist_pdf(job_data, job_folder_path)
+
+        except Exception as e:
+            print(f"Job not created: {e}")

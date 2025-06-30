@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget,
@@ -18,6 +19,8 @@ from PySide6.QtWidgets import (
     QTreeView
 )
 
+from src.widgets.job_details_dialog import JobDetailsDialog
+import src.config as config
 
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, QDate
@@ -26,8 +29,8 @@ class ArchivePageWidget(QWidget):
     def __init__(self, base_path):
         super().__init__()
         self.base_path = base_path
-        self.save_file = os.path.join(self.base_path, "data", "archived_jobs.json")
-        self.network_path = r"Z:\3 Encoding and Printing Files\Archived Jobs"
+        # The primary source of truth is now the directory, not a single file.
+        self.archive_dir = config.ARCHIVE_DIR
         
         self.all_jobs = [] # To store all loaded jobs
         self.setup_ui()
@@ -106,15 +109,39 @@ class ArchivePageWidget(QWidget):
         main_layout.addLayout(content_layout)
         self.setLayout(main_layout)
 
+        # Connect double-click signal
+        self.jobs_table.doubleClicked.connect(self.open_job_details)
+
     def add_archived_job(self, job_data):
-        print(f"Archiving job: {job_data.get('Job Ticket#')}")
-        
-        # Add a timestamp to the job data
-        job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        self.all_jobs.append(job_data)
-        self.update_archive_display()
-        self.save_data()
+        job_folder_path = job_data.get('job_folder_path')
+        if not job_folder_path or not os.path.exists(job_folder_path):
+            QMessageBox.warning(self, "Archive Error", "Original job folder not found. Cannot archive.")
+            return
+
+        # The new destination for the job folder is inside the main archive directory
+        destination_folder_name = os.path.basename(job_folder_path)
+        destination_path = os.path.join(self.archive_dir, destination_folder_name)
+
+        try:
+            # Move the entire job folder
+            shutil.move(job_folder_path, destination_path)
+            
+            # Update the job's folder path to its new location BEFORE saving/appending
+            job_data['job_folder_path'] = destination_path
+            
+            # Save the job metadata inside the newly moved folder
+            job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            metadata_path = os.path.join(destination_path, 'job_data.json')
+            with open(metadata_path, 'w') as f:
+                json.dump(job_data, f, indent=4)
+            
+            # Add to the view
+            self.all_jobs.append(job_data)
+            self.update_archive_display()
+            QMessageBox.information(self, "Success", f"Job moved to archive:\n{destination_path}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Archive Error", f"Could not move job to archive.\nError: {e}")
 
     def get_job_data(self, row_index):
         job_data = {}
@@ -142,9 +169,24 @@ class ArchivePageWidget(QWidget):
             selected_row_index = selection_model.selectedRows()[0]
             # Find the corresponding job in self.all_jobs and remove it
             job_to_remove = self._get_job_data_for_row(selected_row_index.row())
-            self.all_jobs = [j for j in self.all_jobs if j.get('Job Ticket#') != job_to_remove.get('Job Ticket#')]
-            self.model.removeRow(selected_row_index.row())
-            self.save_data()
+            
+            # New logic: find the job folder and delete it
+            job_folder_path = job_to_remove.get('job_folder_path')
+            if job_folder_path and os.path.exists(job_folder_path):
+                reply = QMessageBox.question(self, "Delete Folder", 
+                                           f"This will permanently delete the folder and all its contents:\n{job_folder_path}\n\nAre you sure?",
+                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.Yes:
+                    try:
+                        shutil.rmtree(job_folder_path)
+                        # Remove from the list and table
+                        self.all_jobs = [j for j in self.all_jobs if j.get('job_folder_path') != job_folder_path]
+                        self.model.removeRow(selected_row_index.row())
+                        QMessageBox.information(self, "Deleted", "Job folder has been deleted.")
+                    except Exception as e:
+                        QMessageBox.critical(self, "Delete Error", f"Could not delete folder.\nError: {e}")
+            else:
+                QMessageBox.warning(self, "Delete Error", "Could not find job folder to delete.")
 
     def add_job_to_table(self, job_data, status="Archived"):
         row_items = [
@@ -161,37 +203,65 @@ class ArchivePageWidget(QWidget):
         self.model.appendRow(row_items)
 
     def load_jobs(self):
-        if not os.path.exists(self.save_file):
-            print("save file does not exist. Fresh start")
+        self.all_jobs = []
+        if not os.path.exists(self.archive_dir):
+            os.makedirs(self.archive_dir)
             return
         
-        try:
-            with open(self.save_file, "r") as f:
-                self.all_jobs = json.load(f)
-            
-            self.update_archive_display()
-            self.populate_customer_filter()
-            self.apply_filters() # apply default filters on load
+        for folder_name in os.listdir(self.archive_dir):
+            job_folder_path = os.path.join(self.archive_dir, folder_name)
+            if os.path.isdir(job_folder_path):
+                metadata_path = os.path.join(job_folder_path, 'job_data.json')
+                if os.path.exists(metadata_path):
+                    try:
+                        with open(metadata_path, 'r') as f:
+                            job_data = json.load(f)
+                            # Ensure the path is correct for later use (like deleting)
+                            job_data['job_folder_path'] = job_folder_path
+                            self.all_jobs.append(job_data)
+                    except Exception as e:
+                        print(f"Error loading job data from {metadata_path}: {e}")
 
-        except Exception as e:
-            print("Error loading jobs:", e)
-            self.all_jobs = []
+        self.update_archive_display()
+        self.populate_customer_filter()
+        self.apply_filters()
 
     def save_data(self):
-        try:
-            with open(self.save_file, "w") as f:
-                json.dump(self.all_jobs, f, indent=4)
-        except IOError as e:
-            print(f"Error saving data: {e}")
+        # This function is no longer needed as we save data in individual json files.
+        pass
     
     def _get_job_data_for_row(self, row):
-        job_data = {}
-        # This needs to get data from the currently displayed row in the table model
-        if row < self.model.rowCount():
-            for col, header in enumerate(self.headers):
-                item = self.model.item(row, col)
-                job_data[header] = item.text() if item else ""
-        return job_data
+        """
+        Safely retrieves the full job data dictionary from the master list
+        (self.all_jobs) that corresponds to the given visible row in the table,
+        accounting for sorting and filtering.
+        """
+        if row < 0 or row >= self.model.rowCount():
+            return None
+
+        # Get unique identifiers from the visible row in the model
+        try:
+            job_ticket_col = self.headers.index("Job Ticket#")
+            po_num_col = self.headers.index("PO#")
+        except ValueError:
+            # This should not happen if headers are consistent
+            return None
+
+        job_ticket_item = self.model.item(row, job_ticket_col)
+        po_num_item = self.model.item(row, po_num_col)
+
+        if not job_ticket_item or not po_num_item:
+            return None
+
+        job_ticket = job_ticket_item.text()
+        po_num = po_num_item.text()
+
+        # Find the corresponding job in the full list of jobs
+        for job in self.all_jobs:
+            if job.get("Job Ticket#") == job_ticket and job.get("PO#") == po_num:
+                return job  # Return the full dictionary
+        
+        return None # Return None if no match is found
 
     def update_archive_display(self):
         """This will update both the tree and the table."""
@@ -301,3 +371,35 @@ class ArchivePageWidget(QWidget):
         # menu.addAction("Move to Active", self.move_to_archive) # This needs more implementation
         menu.addAction("Delete Job", self.delete_selected_job)
         menu.exec(event.globalPos())
+
+    def open_job_details(self, index):
+        if not index.isValid():
+            return
+
+        row = index.row()
+        job_data = self._get_job_data_for_row(row)
+        
+        if not job_data:
+            QMessageBox.warning(self, "Error", "Could not retrieve job data.")
+            return
+
+        dialog = JobDetailsDialog(job_data, self.base_path, self)
+        dialog.setWindowTitle(f"Archived Job Details: {job_data.get('Job Ticket#', 'N/A')}")
+        
+        # Make the dialog read-only
+        dialog.edit_btn.setEnabled(False)
+        
+        # Disable specific buttons by object name if they are set
+        complete_btn = dialog.findChild(QPushButton, "complete_btn")
+        if complete_btn:
+            complete_btn.setEnabled(False)
+        
+        archive_btn = dialog.findChild(QPushButton, "archive_btn")
+        if archive_btn:
+            archive_btn.setEnabled(False)
+        
+        delete_btn = dialog.findChild(QPushButton, "deleteButton")
+        if delete_btn:
+            delete_btn.setEnabled(False)
+
+        dialog.exec()
