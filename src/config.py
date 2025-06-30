@@ -30,6 +30,16 @@ TEMPLATES_DIR_KEY = "paths/templates"
 DEFAULT_TEMPLATES_DIR = os.path.join(BASE_PATH, "templates")
 TEMPLATES_DIR = settings.value(TEMPLATES_DIR_KEY, DEFAULT_TEMPLATES_DIR)
 
+# Directory for job documents
+JOB_DIR_KEY = "paths/jobs"
+DEFAULT_JOB_DIR = os.path.join(BASE_PATH, "jobs")
+JOB_DIR = settings.value(JOB_DIR_KEY, DEFAULT_JOB_DIR)
+
+# Directory for active job source files
+ACTIVE_JOBS_SOURCE_DIR_KEY = "paths/active_jobs_source"
+DEFAULT_ACTIVE_JOBS_SOURCE_DIR = os.path.join(BASE_PATH, "active_jobs_source")
+ACTIVE_JOBS_SOURCE_DIR = settings.value(ACTIVE_JOBS_SOURCE_DIR_KEY, DEFAULT_ACTIVE_JOBS_SOURCE_DIR)
+
 # --- TXT File Paths for Combobox Data ---
 # These are the .txt files that the job wizard reads from
 CUSTOMER_NAMES_FILE = os.path.join(BASE_PATH, "data", "Customer_names.txt")
@@ -44,6 +54,7 @@ def ensure_dirs_exist():
     """
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
+    os.makedirs(ACTIVE_JOBS_SOURCE_DIR, exist_ok=True)
     # Also ensure the data directory exists
     os.makedirs(os.path.join(BASE_PATH, "data"), exist_ok=True)
 

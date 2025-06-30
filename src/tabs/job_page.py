@@ -27,6 +27,7 @@ from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal
 from src.wizards.new_job_wizard import NewJobWizard
 from src.widgets.job_details_dialog import JobDetailsDialog
+import src.config as config
 
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
@@ -87,11 +88,13 @@ class JobPageWidget(QWidget):
 
         if wizard.exec():
             job_data = wizard.get_data()
-            # Create the job folder first and set the job_folder_path
-            self.create_job_folder_and_checklist(job_data)
-            # Then add to table and save (now with the job_folder_path included)
-            self.add_job_to_table(job_data)
-            self.save_data()
+            # create_job_folder_and_checklist handles folder creation, json saving, and copying
+            job_created = self.create_job_folder_and_checklist(job_data)
+            
+            if job_created:
+                # Add to table and our in-memory list
+                self.add_job_to_table(job_data)
+                # No longer need to call save_data() as persistence is handled by folder creation
         else:
             print("job not created")
 
@@ -113,25 +116,44 @@ class JobPageWidget(QWidget):
             self.all_jobs.append(job_data)
 
     def load_jobs(self):
-        if not os.path.exists(self.save_file):
-            print("save file does not exist. Starting fresh.")
+        """
+        Loads jobs by scanning the ACTIVE_JOBS_SOURCE_DIR for job_data.json files.
+        This is now the single source of truth for active jobs on startup.
+        """
+        self.all_jobs = []
+        self.model.removeRows(0, self.model.rowCount())
+
+        active_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
+        if not os.path.exists(active_source_dir):
+            print(f"Active jobs source directory not found, creating it: {active_source_dir}")
+            os.makedirs(active_source_dir)
             return
 
-        try:
-            with open(self.save_file, "r") as f:
-                self.all_jobs = json.load(f)
-                
-            for job in self.all_jobs:
-                self.add_job_to_table(job)
-        except Exception as e:
-            print("Error loading jobs:", e)
+        for root, _, files in os.walk(active_source_dir):
+            if "job_data.json" in files:
+                job_data_path = os.path.join(root, "job_data.json")
+                try:
+                    with open(job_data_path, "r", encoding='utf-8') as f:
+                        job_data = json.load(f)
+                    
+                    # The path in the json might be from another system.
+                    # The folder it resides in is the canonical path for the active source copy.
+                    job_data['active_source_folder_path'] = root
+
+                    # The primary path is also stored in the json, which is what we want.
+                    self.add_job_to_table(job_data)
+
+                except json.JSONDecodeError:
+                    print(f"Error decoding JSON from {job_data_path}")
+                except Exception as e:
+                    print(f"Error loading job from {job_data_path}: {e}")
 
     def save_data(self):
-        try:
-            with open(self.save_file, "w") as f:
-                json.dump(self.all_jobs, f, indent=4)
-        except IOError as e:
-            print(f"Error saving data: {e}")
+        """
+        This function is deprecated. Job data is now managed directly as files
+        in the user-selected directory and the active jobs source directory.
+        """
+        pass
 
     def contextMenuEvent(self, event):
         selection_model = self.jobs_table.selectionModel()
@@ -243,38 +265,35 @@ class JobPageWidget(QWidget):
         wizard.setWindowTitle("Edit Job")
         wizard.set_all_data(current_data)
 
-        # For editing, we don't need to re-select the save location
-        # so we can hide that page.
-        wizard.setPage(2, QWidget()) # Hides the save location page
         wizard.page(2).setVisible(False)
 
 
         if wizard.exec():
             new_data = wizard.get_data()
-            for col, header in enumerate(self.headers):
-                if header in new_data:
-                    cell_index = self.model.index(selected_row_index.row(), col)
-                    self.model.setData(cell_index, new_data[header], Qt.EditRole)
-            
-            self.save_data()
+            self._update_job(selected_row_index.row(), new_data)
 
     def delete_selected_job(self):
         selection_model = self.jobs_table.selectionModel()
         if not selection_model.hasSelection():
             return
+
+        selected_row_index = selection_model.selectedRows()[0]
+        job_to_delete = self._get_job_data_for_row(selected_row_index.row())
+
+        if not job_to_delete:
+            QMessageBox.warning(self, "Error", "Could not find job data to delete.")
+            return
+
         reply = QMessageBox.question(self, 
                                      "Confirmation", 
-                                     "Are you sure you want to delete this job?",
+                                     f"Are you sure you want to permanently delete this job and all its associated files?\n\nJob: {job_to_delete.get('PO#')} - {job_to_delete.get('Job Ticket#')}",
                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-
-            selected_row_index = selection_model.selectedRows()[0]
-            self.model.removeRow(selected_row_index.row())
-            # Also remove from our source of truth
+            self._delete_job_files(job_to_delete)
+            # Remove from the in-memory list and the table view
             del self.all_jobs[selected_row_index.row()]
+            self.model.removeRow(selected_row_index.row())
         
-        self.save_data()
-
     def _get_job_data_for_row(self, row):
         if 0 <= row < len(self.all_jobs):
             return self.all_jobs[row]
@@ -297,15 +316,19 @@ class JobPageWidget(QWidget):
         
         if not job_folder_path or not os.path.exists(job_folder_path):
             QMessageBox.warning(self, "Archive Error", "Original job folder not found or path not set. Cannot archive.")
+            # We should also check the active source folder and offer to archive from there.
+            # For now, we stick to the original logic.
             return
 
         # Emit the job data to the archive page
         self.job_to_archive.emit(job_data)
 
+        # Since it's archived, we delete it from the active jobs directories
+        self._delete_job_files(job_data)
+
         # Remove the job from the active list
         self.model.removeRow(selected_row)
         del self.all_jobs[selected_row]
-        self.save_data()
         
         QMessageBox.information(self, "Success", "Job has been successfully archived.")
 
@@ -404,60 +427,127 @@ class JobPageWidget(QWidget):
         dialog.exec()
         
     def update_job_in_table(self, updated_job_data):
-        """Update job data in the table"""
+        """Update job data in the table and filesystem. Called from details dialog."""
         # Find the row with matching job data and update it
         for i, job in enumerate(self.all_jobs):
-            if (job.get('Job Ticket#') == updated_job_data.get('Job Ticket#') and
-                job.get('PO#') == updated_job_data.get('PO#')):
-                
-                # Update the source of truth
-                self.all_jobs[i] = updated_job_data
-                
-                # Update the view
-                for col, header in enumerate(self.headers):
-                    if header in updated_job_data:
-                        item = QStandardItem(str(updated_job_data[header]))
-                        self.model.setItem(i, col, item)
+            # Use a reliable identifier to find the job
+            if (job.get('job_folder_path') == updated_job_data.get('job_folder_path')):
+                self._update_job(i, updated_job_data)
                 break
-        self.save_data()
+
+    def _update_job(self, row_index, new_data):
+        """The core logic for updating a job's files and data."""
+        current_data = self.all_jobs[row_index]
+        old_primary_path = current_data.get('job_folder_path')
+
+        if not old_primary_path:
+            QMessageBox.critical(self, "Update Error", "Cannot update job: Original folder path is missing.")
+            return
+
+        # --- 1. Determine new path for the primary job folder ---
+        try:
+            # Preserve creation date from the original folder name
+            old_folder_name = os.path.basename(old_primary_path)
+            date_part = old_folder_name.split(' - ')[0]
+        except IndexError:
+            date_part = datetime.now().strftime("%y-%m-%d") # Fallback
+        
+        customer = new_data.get("Customer")
+        label_size = new_data.get("Label Size")
+        po_num = new_data.get("PO#")
+        job_ticket = new_data.get("Job Ticket#")
+        new_folder_name = f"{date_part} - {po_num} - {job_ticket}"
+        
+        # Reconstruct the base path (e.g., C:/Users/../Desktop) from the old full path
+        base_primary_path = os.path.dirname(os.path.dirname(os.path.dirname(old_primary_path)))
+        new_primary_path = os.path.join(base_primary_path, customer, label_size, new_folder_name)
+
+        # --- 2. Move the primary folder if its path has changed ---
+        if old_primary_path != new_primary_path:
+            try:
+                print(f"Path changed. Moving from {old_primary_path} to {new_primary_path}")
+                os.makedirs(os.path.dirname(new_primary_path), exist_ok=True)
+                shutil.move(old_primary_path, new_primary_path)
+            except Exception as e:
+                QMessageBox.critical(self, "File Error", f"Could not move job folder: {e}.\nUpdate aborted.")
+                return
+
+        # --- 3. Update the job_data.json file inside the new primary folder location ---
+        new_data['job_folder_path'] = new_primary_path
+        try:
+            with open(os.path.join(new_primary_path, "job_data.json"), "w") as f:
+                json.dump(new_data, f, indent=4)
+        except Exception as e:
+            QMessageBox.critical(self, "File Error", f"Could not update job_data.json: {e}.\nUpdate aborted.")
+            return
+
+        # --- 4. Synchronize change with the active jobs source directory ---
+        try:
+            # First, remove the old version from the active source directory
+            old_active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, current_data.get("Customer"), current_data.get("Label Size"), old_folder_name)
+            if os.path.exists(old_active_source_path):
+                shutil.rmtree(old_active_source_path)
+            
+            # Then, copy the updated primary folder to the active source directory
+            new_active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, new_folder_name)
+            shutil.copytree(new_primary_path, new_active_source_path)
+            print(f"Successfully synced update to {new_active_source_path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Sync Error", f"Could not synchronize job update to the active source directory: {e}")
+
+        # --- 5. Update the in-memory list and the UI table ---
+        self.all_jobs[row_index] = new_data
+        for col, header in enumerate(self.headers):
+            if header in new_data:
+                item = QStandardItem(str(new_data[header]))
+                self.model.setItem(row_index, col, item)
         
     def handle_job_archived(self, job_data):
         """Handle job being archived from details dialog"""
         self.job_to_archive.emit(job_data)
-        # Remove from current table
-        # Find the row with matching job data and remove it
+        
+        # Find the row and remove it, deleting files as part of the process
         for i, job in enumerate(self.all_jobs):
-            if (job.get('Job Ticket#') == job_data.get('Job Ticket#') and
-                job.get('PO#') == job_data.get('PO#')):
+            if (job.get('job_folder_path') == job_data.get('job_folder_path')):
+                self._delete_job_files(job_data)
                 self.model.removeRow(i)
                 del self.all_jobs[i]
                 break
-        self.save_data()
         
     def delete_job_by_row(self, row):
-        """Delete job by row index"""
+        """Delete job by row index, including all its files."""
         if 0 <= row < self.model.rowCount():
             job_data = self._get_job_data_for_row(row)
-            job_folder_path = job_data.get('job_folder_path')
-
+            
             reply = QMessageBox.question(self, "Delete Job", 
-                                       f"This will delete the job from the list. If a job folder exists, do you want to delete it as well?\n\nFolder: {job_folder_path}",
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
-
-            if reply == QMessageBox.StandardButton.Cancel:
-                return
+                                       f"This will permanently delete the job and all its files. Are you sure?\n\nFolder: {job_data.get('job_folder_path')}",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
 
             if reply == QMessageBox.StandardButton.Yes:
-                if job_folder_path and os.path.exists(job_folder_path):
-                    try:
-                        shutil.rmtree(job_folder_path)
-                        QMessageBox.information(self, "Folder Deleted", "The job folder has been deleted.")
-                    except Exception as e:
-                        QMessageBox.warning(self, "Folder Error", f"Could not delete the job folder.\n{e}")
-            
-            self.model.removeRow(row)
-            del self.all_jobs[row]
-            self.save_data()
+                self._delete_job_files(job_data)
+                self.model.removeRow(row)
+                del self.all_jobs[row]
+
+    def _delete_job_files(self, job_data):
+        """Deletes job folders from primary and active source locations."""
+        # 1. Delete from primary location
+        primary_path = job_data.get('job_folder_path')
+        if primary_path and os.path.exists(primary_path):
+            try:
+                shutil.rmtree(primary_path)
+                print(f"Deleted primary folder: {primary_path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Delete Error", f"Could not delete primary job folder.\n{e}")
+        
+        # 2. Delete from active jobs source
+        try:
+            old_folder_name = os.path.basename(primary_path)
+            active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, job_data.get("Customer"), job_data.get("Label Size"), old_folder_name)
+            if os.path.exists(active_source_path):
+                shutil.rmtree(active_source_path)
+                print(f"Deleted active source folder: {active_source_path}")
+        except Exception as e:
+             QMessageBox.warning(self, "Delete Error", f"Could not delete active source job folder.\n{e}")
 
     def create_job_folder_and_checklist(self, job_data):
         if job_data.get('Shared Drive'):
@@ -490,8 +580,33 @@ class JobPageWidget(QWidget):
 
             os.makedirs(job_folder_path, exist_ok=True)
             print(f"Successfully created job folder: {job_folder_path}")
+
+            # Save job data to a JSON file within the folder
+            try:
+                with open(os.path.join(job_folder_path, "job_data.json"), "w") as f:
+                    json.dump(job_data, f, indent=4)
+            except IOError as e:
+                QMessageBox.warning(self, "Save Error", f"Could not save job_data.json.\n{e}")
             
             self.create_checklist_pdf(job_data, job_folder_path)
 
+            # Copy to active jobs source directory
+            source_dest_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size)
+            os.makedirs(source_dest_path, exist_ok=True)
+            
+            try:
+                shutil.copytree(job_folder_path, os.path.join(source_dest_path, job_folder_name))
+                print(f"Successfully copied job folder to: {os.path.join(source_dest_path, job_folder_name)}")
+            except FileExistsError:
+                print(f"Folder already exists in active source, skipping copy: {os.path.join(source_dest_path, job_folder_name)}")
+                # For a new job, this indicates a likely duplicate. We should warn the user.
+                QMessageBox.warning(self, "Duplicate Warning", f"A folder with the same name already exists in the active source directory. The job was created in the primary location, but not copied.")
+                pass
+            except Exception as e:
+                QMessageBox.warning(self, "Copy Error", f"Could not copy job folder to active source directory.\n\nError: {e}")
+            
+            return True # Indicate success
+
         except Exception as e:
             print(f"Job not created: {e}")
+            return False

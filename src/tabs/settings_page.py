@@ -61,6 +61,12 @@ class SettingsPageWidget(QWidget):
         self.templates_dir_edit = self.create_directory_setting_row(
             dir_layout, "Templates Directory:", "Folder containing document templates.", config.TEMPLATES_DIR
         )
+        self.job_dir_edit = self.create_directory_setting_row(
+            dir_layout, "Job Directory:", "Folder containing job documents.", config.JOB_DIR
+        )
+        self.active_jobs_source_dir_edit = self.create_directory_setting_row(
+            dir_layout, "Active Jobs Source Directory:", "Folder where a copy of active jobs will be stored.", config.ACTIVE_JOBS_SOURCE_DIR
+        )
 
         scroll_layout.addWidget(directory_group)
 
@@ -177,6 +183,12 @@ class SettingsPageWidget(QWidget):
             
             config.settings.setValue(config.TEMPLATES_DIR_KEY, self.templates_dir_edit.text())
             config.TEMPLATES_DIR = self.templates_dir_edit.text()
+            
+            config.settings.setValue(config.JOB_DIR_KEY, self.job_dir_edit.text())
+            config.JOB_DIR = self.job_dir_edit.text()
+            
+            config.settings.setValue(config.ACTIVE_JOBS_SOURCE_DIR_KEY, self.active_jobs_source_dir_edit.text())
+            config.ACTIVE_JOBS_SOURCE_DIR = self.active_jobs_source_dir_edit.text()
             
             config.ensure_dirs_exist()
             QMessageBox.information(self, "Settings Saved", "Directory settings have been saved successfully!")
