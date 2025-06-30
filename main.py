@@ -17,6 +17,8 @@ from PySide6.QtCore import Qt, QSize
 # Import the widgets from their new locations
 from src.tabs.job_page import JobPageWidget
 from src.tabs.archive_page import ArchivePageWidget
+from src.tabs.settings_page import SettingsPageWidget
+import src.config as config
 
 
 
@@ -30,6 +32,9 @@ class MainWindow(QMainWindow):
 
         # Define the base path for the application
         self.base_path = os.path.dirname(os.path.abspath(__file__))
+
+        # Ensure that the directories specified in the config exist
+        config.ensure_dirs_exist()
 
         # Main layout
         main_layout = QHBoxLayout()
@@ -49,13 +54,12 @@ class MainWindow(QMainWindow):
         # Instantiate pages, passing the base_path to them
         self.jobs_page = JobPageWidget(base_path=self.base_path)
         self.archive_page = ArchivePageWidget(base_path=self.base_path)
+        self.settings_page = SettingsPageWidget()
 
         # Add pages to the stack
         self.add_page("Dashboard", QLabel("This is the Dashboard Page.\\n\\nSummary info will go here."))
-        self.add_page("QuickTools", QLabel("This is the QuickTools Page.\\n\\nWidgets for small, one-off tasks go here."))
         self.add_page("Jobs", self.jobs_page)
-        self.add_page("Reports", QLabel("This is the Reports Page.\\n\\nCharts and data exports will live here."))
-        self.add_page("Settings", QLabel("This is the Settings Page.\\n\\nApplication settings will be configured here."))
+        self.add_page("Settings", self.settings_page)
         self.add_page("Archive", self.archive_page)
 
         
