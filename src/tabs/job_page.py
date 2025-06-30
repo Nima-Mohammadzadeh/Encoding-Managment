@@ -59,8 +59,8 @@ class JobPageWidget(QWidget):
 
         self.model = QStandardItemModel()
         self.headers = ([
-        "Customer", "Part#", "Job Ticket#", "PO#",
-         "Inlay Type", "Label Size", "Quantity", "Due Date"
+        "Customer", "Part#", "Ticket#", "PO#",
+         "Inlay Type", "Label Size", "Qty", "Due Date"
         ])      
         self.model.setHorizontalHeaderLabels(self.headers)
 
@@ -75,12 +75,13 @@ class JobPageWidget(QWidget):
 
         header = self.jobs_table.horizontalHeader()
         header.setSectionResizeMode(self.headers.index("Customer"), QHeaderView.ResizeMode.Stretch)
+        header.resizeSection(self.headers.index("Customer"), 200)
         header.setSectionResizeMode(self.headers.index("Part#"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Job Ticket#"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Ticket#"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("PO#"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("Inlay Type"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("Label Size"), QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(self.headers.index("Quantity"), QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.headers.index("Qty"), QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.headers.index("Due Date"), QHeaderView.ResizeMode.ResizeToContents)
         self.jobs_table.verticalHeader().hide()
        
@@ -150,7 +151,10 @@ class JobPageWidget(QWidget):
             selected_row = selection_model.selectedRows()[0].row()
             if 0 <= selected_row < len(self.all_jobs):
                 current_job = self.all_jobs[selected_row]
-                current_selection = (current_job.get('Job Ticket#'), current_job.get('PO#'))
+                current_selection = (
+                    self.get_job_data_value(current_job, "Ticket#", "Job Ticket#"), 
+                    current_job.get('PO#')
+                )
                 print(f"Preserving selection: {current_selection}")
         
         # Reload jobs from directory
@@ -169,7 +173,7 @@ class JobPageWidget(QWidget):
         """Restore table selection based on job ticket and PO number."""
         job_ticket, po_num = job_identifiers
         for row in range(self.model.rowCount()):
-            row_job_ticket = self.model.item(row, self.headers.index("Job Ticket#")).text()
+            row_job_ticket = self.model.item(row, self.headers.index("Ticket#")).text()
             row_po_num = self.model.item(row, self.headers.index("PO#")).text()
             if row_job_ticket == job_ticket and row_po_num == po_num:
                 self.jobs_table.selectRow(row)
@@ -195,20 +199,42 @@ class JobPageWidget(QWidget):
 
     def add_job_to_table(self, job_data):
         # This function will now just handle the view
+        # Format the due date to mm/dd/yyyy
+        due_date_formatted = self.format_date_for_display(job_data.get("Due Date", ""))
+        
+        # Handle both old and new column names for backward compatibility
+        job_ticket = job_data.get("Ticket#", job_data.get("Job Ticket#", ""))
+        quantity = job_data.get("Qty", job_data.get("Quantity", ""))
+        
         row_items = [
             QStandardItem(job_data.get("Customer", "")),
             QStandardItem(job_data.get("Part#", "")),
-            QStandardItem(job_data.get("Job Ticket#", "")),
+            QStandardItem(job_ticket),
             QStandardItem(job_data.get("PO#", "")),
             QStandardItem(job_data.get("Inlay Type", "")),
             QStandardItem(job_data.get("Label Size", "")),
-            QStandardItem(job_data.get("Quantity", "")),
-            QStandardItem(job_data.get("Due Date", ""))
+            QStandardItem(quantity),
+            QStandardItem(due_date_formatted)
         ]
         self.model.appendRow(row_items)
         # Add the full job data to our source of truth list
         if job_data not in self.all_jobs:
             self.all_jobs.append(job_data)
+
+    def format_date_for_display(self, date_string):
+        """Convert date from ISO format (yyyy-mm-dd) to mm/dd/yyyy format."""
+        if not date_string:
+            return ""
+        
+        try:
+            # Parse the ISO date format (yyyy-mm-dd)
+            from datetime import datetime
+            date_obj = datetime.strptime(date_string, "%Y-%m-%d")
+            # Format as mm/dd/yyyy
+            return date_obj.strftime("%m/%d/%Y")
+        except ValueError:
+            # If parsing fails, return the original string
+            return date_string
 
     def load_jobs(self):
         """
@@ -277,7 +303,15 @@ class JobPageWidget(QWidget):
         job_data = {}
         for col, header in enumerate(self.headers):
             cell_index = self.model.index(selected_row_index.row(), col)
-            job_data[header] = self.model.data(cell_index, Qt.DisplayRole)
+            cell_value = self.model.data(cell_index, Qt.DisplayRole)
+            
+            # Map display headers back to data keys for backward compatibility
+            if header == "Ticket#":
+                job_data["Job Ticket#"] = cell_value  # Use old key for compatibility
+            elif header == "Qty":
+                job_data["Quantity"] = cell_value  # Use old key for compatibility
+            else:
+                job_data[header] = cell_value
 
         # Let user select where to create the job folder
         directory = QFileDialog.getExistingDirectory(
@@ -294,7 +328,7 @@ class JobPageWidget(QWidget):
             customer = job_data.get("Customer", "UnknownCustomer")
             label_size = job_data.get("Label Size", "UnknownLabelSize")
             po_num = job_data.get("PO#", "UnknownPO")
-            job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
+            job_ticket_num = job_data.get("Ticket#", "UnknownTicket")
             
             # Use current date for folder creation
             current_date = datetime.now().strftime("%y-%m-%d")
@@ -318,7 +352,44 @@ class JobPageWidget(QWidget):
             # Get the full job data for creating JSON and PDF
             full_job_data = self._get_job_data_for_row(selected_row_index.row())
             if full_job_data:
-                # Save job data JSON in the new folder
+                # For folder creation, use the current data from table with proper field mapping
+                folder_job_data = {}
+                for col, header in enumerate(self.headers):
+                    cell_index = self.model.index(selected_row_index.row(), col)
+                    cell_value = self.model.data(cell_index, Qt.DisplayRole)
+                    
+                    # Map display headers back to data keys for folder creation
+                    if header == "Ticket#":
+                        folder_job_data["Job Ticket#"] = cell_value  # Use old key for folder naming
+                    elif header == "Qty":
+                        folder_job_data["Quantity"] = cell_value  # Use old key for data consistency
+                    else:
+                        folder_job_data[header] = cell_value
+                
+                # Use current date for folder creation
+                current_date = datetime.now().strftime("%y-%m-%d")
+                customer = folder_job_data.get("Customer", "UnknownCustomer")
+                label_size = folder_job_data.get("Label Size", "UnknownLabelSize")
+                po_num = folder_job_data.get("PO#", "UnknownPO")
+                job_ticket_num = folder_job_data.get("Job Ticket#", "UnknownTicket")
+                job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
+                
+                # Create the directory structure: Selected Dir / Customer / Label Size / Job Folder
+                customer_path = os.path.join(directory, customer)
+                label_size_path = os.path.join(customer_path, label_size)
+                job_path = os.path.join(label_size_path, job_folder_name)
+                
+                # Create directories if they don't exist
+                os.makedirs(customer_path, exist_ok=True)
+                os.makedirs(label_size_path, exist_ok=True)
+                
+                if os.path.exists(job_path):
+                    QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
+                    return
+                
+                os.makedirs(job_path)
+                
+                # Save job data JSON in the new folder (preserve full job data structure)
                 full_job_data['job_folder_path'] = job_path
                 try:
                     with open(os.path.join(job_path, "job_data.json"), "w") as f:
@@ -376,7 +447,7 @@ class JobPageWidget(QWidget):
 
         reply = QMessageBox.question(self, 
                                      "Confirmation", 
-                                     f"Are you sure you want to permanently delete this job and all its associated files?\n\nJob: {job_to_delete.get('PO#')} - {job_to_delete.get('Job Ticket#')}",
+                                     f"Are you sure you want to permanently delete this job and all its associated files?\n\nJob: {job_to_delete.get('PO#')} - {self.get_job_data_value(job_to_delete, 'Ticket#', 'Job Ticket#')}",
                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._delete_job_files(job_to_delete)
@@ -463,11 +534,11 @@ class JobPageWidget(QWidget):
         fields_to_fill = {
             "Customer": "customer",
             "Part#": "part_num",
-            "Job Ticket#": "job_ticket",
+            "Ticket#": "job_ticket",
             "PO#": "customer_po",
             "Inlay Type": "inlay_type",
             "Label Size": "label_size",
-            "Quantity": "qty",
+            "Qty": "qty",
             "Item": "item",
             "UPC Number": "upc",
             "LPR": "lpr",
@@ -477,7 +548,7 @@ class JobPageWidget(QWidget):
             "Date": "Date",
         }
 
-        output_file_name = f"{job_data.get('Customer', '')}-{job_data.get('Job Ticket#', '')}-{job_data.get('PO#', '')}-Checklist.pdf"
+        output_file_name = f"{job_data.get('Customer', '')}-{self.get_job_data_value(job_data, 'Ticket#', 'Job Ticket#')}-{job_data.get('PO#', '')}-Checklist.pdf"
         save_path = os.path.join(job_path, output_file_name)
 
         
@@ -490,6 +561,10 @@ class JobPageWidget(QWidget):
                             value = ""
                             if data_key == "Date":
                                 value = datetime.now().strftime('%m/%d/%Y')
+                            elif data_key == "Ticket#":
+                                value = self.get_job_data_value(job_data, "Ticket#", "Job Ticket#")
+                            elif data_key == "Qty":
+                                value = self.get_job_data_value(job_data, "Qty", "Quantity")
                             else:
                                 value = job_data.get(data_key, "")
                             
@@ -528,78 +603,20 @@ class JobPageWidget(QWidget):
         for i, job in enumerate(self.all_jobs):
             # Use a reliable identifier to find the job
             if (job.get('job_folder_path') == updated_job_data.get('job_folder_path')):
-                self._update_job(i, updated_job_data)
+                # Update the source of truth
+                self.all_jobs[i] = updated_job_data
+                
+                # Update the view with proper formatting
+                for col, header in enumerate(self.headers):
+                    if header in updated_job_data:
+                        # Special handling for Due Date formatting
+                        if header == "Due Date":
+                            formatted_value = self.format_date_for_display(updated_job_data[header])
+                            item = QStandardItem(formatted_value)
+                        else:
+                            item = QStandardItem(str(updated_job_data[header]))
+                        self.model.setItem(i, col, item)
                 break
-
-    def _update_job(self, row_index, new_data):
-        """The core logic for updating a job's files and data."""
-        current_data = self.all_jobs[row_index]
-        old_primary_path = current_data.get('job_folder_path')
-
-        if not old_primary_path:
-            QMessageBox.critical(self, "Update Error", "Cannot update job: Original folder path is missing.")
-            return
-
-        # --- 1. Determine new path for the primary job folder ---
-        try:
-            # Preserve creation date from the original folder name
-            old_folder_name = os.path.basename(old_primary_path)
-            date_part = old_folder_name.split(' - ')[0]
-        except IndexError:
-            date_part = datetime.now().strftime("%y-%m-%d") # Fallback
-        
-        customer = new_data.get("Customer")
-        label_size = new_data.get("Label Size")
-        po_num = new_data.get("PO#")
-        job_ticket = new_data.get("Job Ticket#")
-        new_folder_name = f"{date_part} - {po_num} - {job_ticket}"
-        
-        # Reconstruct the base path (e.g., C:/Users/../Desktop) from the old full path
-        base_primary_path = os.path.dirname(os.path.dirname(os.path.dirname(old_primary_path)))
-        new_primary_path = os.path.join(base_primary_path, customer, label_size, new_folder_name)
-
-        # --- 2. Move the primary folder if its path has changed ---
-        if old_primary_path != new_primary_path:
-            try:
-                print(f"Path changed. Moving from {old_primary_path} to {new_primary_path}")
-                os.makedirs(os.path.dirname(new_primary_path), exist_ok=True)
-                shutil.move(old_primary_path, new_primary_path)
-            except Exception as e:
-                QMessageBox.critical(self, "File Error", f"Could not move job folder: {e}.\nUpdate aborted.")
-                return
-
-        # --- 3. Update the job_data.json file inside the new primary folder location ---
-        new_data['job_folder_path'] = new_primary_path
-        try:
-            with open(os.path.join(new_primary_path, "job_data.json"), "w") as f:
-                json.dump(new_data, f, indent=4)
-        except Exception as e:
-            QMessageBox.critical(self, "File Error", f"Could not update job_data.json: {e}.\nUpdate aborted.")
-            return
-
-        # --- 4. Synchronize change with the active jobs source directory ---
-        try:
-            # First, remove the old version from the active source directory
-            old_active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, current_data.get("Customer"), current_data.get("Label Size"), old_folder_name)
-            if os.path.exists(old_active_source_path):
-                shutil.rmtree(old_active_source_path)
-            
-            # Then, copy the updated primary folder to the active source directory
-            new_active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, new_folder_name)
-            shutil.copytree(new_primary_path, new_active_source_path)
-            print(f"Successfully synced update to {new_active_source_path}")
-        except Exception as e:
-            QMessageBox.warning(self, "Sync Error", f"Could not synchronize job update to the active source directory: {e}")
-
-        # --- 5. Update the in-memory list and the UI table ---
-        self.all_jobs[row_index] = new_data
-        for col, header in enumerate(self.headers):
-            if header in new_data:
-                item = QStandardItem(str(new_data[header]))
-                self.model.setItem(row_index, col, item)
-        
-        # Ensure directories are still being monitored after changes
-        self.ensure_directory_monitoring()
 
     def handle_job_archived(self, job_data):
         """Handle job being archived from details dialog"""
@@ -670,10 +687,10 @@ class JobPageWidget(QWidget):
             label_size = job_data.get("Label Size")
             current_date = datetime.now().strftime("%y-%m-%d")
             po_num = job_data.get("PO#")
-            job_ticket = job_data.get("Job Ticket#")
+            job_ticket = self.get_job_data_value(job_data, "Ticket#", "Job Ticket#")
             
             if not all([customer, label_size, po_num, job_ticket]):
-                QMessageBox.warning(self, "Missing Information", "Customer, Label Size, PO#, and Job Ticket# are required to create a folder.")
+                QMessageBox.warning(self, "Missing Information", "Customer, Label Size, PO#, and Ticket# are required to create a folder.")
                 return
 
             job_folder_name = f"{current_date} - {po_num} - {job_ticket}"
@@ -797,7 +814,7 @@ class JobPageWidget(QWidget):
                   
             current_date = datetime.now().strftime("%y-%m-%d")
             po_num = job_data.get("PO#", "UnknownPO")
-            job_ticket_num = job_data.get("Job Ticket#", "UnknownJobTicket")
+            job_ticket_num = job_data.get("Ticket#", "UnknownTicket")
             customer = job_data.get("Customer", "UnknownCustomer")
             label_size = job_data.get("Label Size", "UnknownLabelSize")
             job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
@@ -855,3 +872,84 @@ class JobPageWidget(QWidget):
             print(f"Error creating job folder: {e}")
             QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
             return None
+
+    def _update_job(self, row_index, new_data):
+        """The core logic for updating a job's files and data."""
+        current_data = self.all_jobs[row_index]
+        old_primary_path = current_data.get('job_folder_path')
+
+        if not old_primary_path:
+            QMessageBox.critical(self, "Update Error", "Cannot update job: Original folder path is missing.")
+            return
+
+        # --- 1. Determine new path for the primary job folder ---
+        try:
+            # Preserve creation date from the original folder name
+            old_folder_name = os.path.basename(old_primary_path)
+            date_part = old_folder_name.split(' - ')[0]
+        except IndexError:
+            date_part = datetime.now().strftime("%y-%m-%d") # Fallback
+        
+        customer = new_data.get("Customer")
+        label_size = new_data.get("Label Size")
+        po_num = new_data.get("PO#")
+        job_ticket = self.get_job_data_value(new_data, "Ticket#", "Job Ticket#")
+        new_folder_name = f"{date_part} - {po_num} - {job_ticket}"
+        
+        # Reconstruct the base path (e.g., C:/Users/../Desktop) from the old full path
+        base_primary_path = os.path.dirname(os.path.dirname(os.path.dirname(old_primary_path)))
+        new_primary_path = os.path.join(base_primary_path, customer, label_size, new_folder_name)
+
+        # --- 2. Move the primary folder if its path has changed ---
+        if old_primary_path != new_primary_path:
+            try:
+                print(f"Path changed. Moving from {old_primary_path} to {new_primary_path}")
+                os.makedirs(os.path.dirname(new_primary_path), exist_ok=True)
+                shutil.move(old_primary_path, new_primary_path)
+            except Exception as e:
+                QMessageBox.critical(self, "File Error", f"Could not move job folder: {e}.\nUpdate aborted.")
+                return
+
+        # --- 3. Update the job_data.json file inside the new primary folder location ---
+        new_data['job_folder_path'] = new_primary_path
+        try:
+            with open(os.path.join(new_primary_path, "job_data.json"), "w") as f:
+                json.dump(new_data, f, indent=4)
+        except Exception as e:
+            QMessageBox.critical(self, "File Error", f"Could not update job_data.json: {e}.\nUpdate aborted.")
+            return
+
+        # --- 4. Synchronize change with the active jobs source directory ---
+        try:
+            # First, remove the old version from the active source directory
+            old_active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, current_data.get("Customer"), current_data.get("Label Size"), old_folder_name)
+            if os.path.exists(old_active_source_path):
+                shutil.rmtree(old_active_source_path)
+            
+            # Then, copy the updated primary folder to the active source directory
+            new_active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, new_folder_name)
+            shutil.copytree(new_primary_path, new_active_source_path)
+            print(f"Successfully synced update to {new_active_source_path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Sync Error", f"Could not synchronize job update to the active source directory: {e}")
+
+        # --- 5. Update the in-memory list and the UI table ---
+        self.all_jobs[row_index] = new_data
+        for col, header in enumerate(self.headers):
+            if header in new_data:
+                # Special handling for Due Date formatting
+                if header == "Due Date":
+                    formatted_value = self.format_date_for_display(new_data[header])
+                    item = QStandardItem(formatted_value)
+                else:
+                    item = QStandardItem(str(new_data[header]))
+                self.model.setItem(row_index, col, item)
+        
+        # Ensure directories are still being monitored after changes
+        self.ensure_directory_monitoring()
+
+    def get_job_data_value(self, job_data, new_key, old_key=None):
+        """Get job data value with fallback for backward compatibility."""
+        if old_key:
+            return job_data.get(new_key, job_data.get(old_key, ""))
+        return job_data.get(new_key, "")
