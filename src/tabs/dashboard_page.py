@@ -24,8 +24,8 @@ class StatCard(QFrame):
     def __init__(self, title, value, icon_path=None, color="#0078d4", parent=None):
         super().__init__(parent)
         self.setFrameStyle(QFrame.Shape.Box)
-        self.setMinimumHeight(80)
-        self.setMaximumHeight(100)
+        self.setMinimumHeight(120)
+        self.setMaximumHeight(140)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         
         # Apply styling
@@ -34,7 +34,7 @@ class StatCard(QFrame):
                 background-color: #2d2d30;
                 border: 1px solid #464647;
                 border-radius: 6px;
-                padding: 10px;
+                padding: 8px;
             }}
             QFrame:hover {{
                 background-color: #3d3d40;
@@ -51,19 +51,30 @@ class StatCard(QFrame):
         
         # Layout
         layout = QVBoxLayout(self)
-        layout.setSpacing(5)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
         
         # Title
         title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: #cccccc; font-size: 11px; font-weight: 500;")
+        title_label.setStyleSheet(f"color: #cccccc; font-size: 12px; font-weight: 500;")
+        title_label.setWordWrap(True)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(title_label)
+        
+        # Value container to ensure proper centering
+        value_container = QWidget()
+        value_layout = QVBoxLayout(value_container)
+        value_layout.setContentsMargins(0, 0, 0, 0)
+        value_layout.setSpacing(0)
         
         # Value
         self.value_label = QLabel(str(value))
-        self.value_label.setStyleSheet(f"color: {color}; font-size: 24px; font-weight: bold;")
-        layout.addWidget(self.value_label)
+        self.value_label.setStyleSheet(f"color: {color}; font-size: 28px; font-weight: bold; line-height: 1.2;")
+        self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.value_label.setWordWrap(True)
+        value_layout.addWidget(self.value_label)
         
+        layout.addWidget(value_container, 1)
         layout.addStretch()
     
     def update_value(self, value):
@@ -126,8 +137,8 @@ class DeadlineItem(QFrame):
         super().__init__(parent)
         self.job_data = job_data
         self.setFrameStyle(QFrame.Shape.NoFrame)
-        self.setMinimumHeight(50)
-        self.setMaximumHeight(60)
+        self.setMinimumHeight(70)
+        self.setMaximumHeight(85)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         
         self.setStyleSheet("""
@@ -144,8 +155,8 @@ class DeadlineItem(QFrame):
         """)
         
         layout = QVBoxLayout(self)
-        layout.setSpacing(2)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+        layout.setContentsMargins(10, 8, 10, 8)
         
         # Customer and PO
         header_layout = QHBoxLayout()
@@ -223,9 +234,48 @@ class DashboardPageWidget(QWidget):
     
     def setup_ui(self):
         """Setup the dashboard UI layout."""
-        main_layout = QVBoxLayout(self)
+        # Main layout for the widget
+        widget_layout = QVBoxLayout(self)
+        widget_layout.setContentsMargins(0, 0, 0, 0)
+        widget_layout.setSpacing(0)
+        
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                background-color: transparent;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background-color: #2d2d30;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #464647;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #5a5a5a;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+            }
+        """)
+        
+        # Create scrollable content widget
+        content_widget = QWidget()
+        scroll_area.setWidget(content_widget)
+        
+        # Layout for scrollable content
+        main_layout = QVBoxLayout(content_widget)
         main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(12)
+        main_layout.setSpacing(15)
         
         # Header
         header_layout = QHBoxLayout()
@@ -259,7 +309,7 @@ class DashboardPageWidget(QWidget):
         
         # Statistics Cards Row
         stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(10)
+        stats_layout.setSpacing(12)
         
         self.active_jobs_card = StatCard("Active Jobs", "0", color="#0078d4")
         self.active_jobs_card.clicked.connect(self.navigate_to_jobs.emit)
@@ -281,7 +331,7 @@ class DashboardPageWidget(QWidget):
         
         # Content area with two columns
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(15)
         
         # Left column - Activity Feed and Quick Actions
         left_column = QVBoxLayout()
@@ -300,7 +350,7 @@ class DashboardPageWidget(QWidget):
         actions_layout = QVBoxLayout(actions_frame)
         
         actions_title = QLabel("Quick Actions")
-        actions_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
+        actions_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
         actions_layout.addWidget(actions_title)
         
         # Action buttons
@@ -381,13 +431,13 @@ class DashboardPageWidget(QWidget):
         activity_layout = QVBoxLayout(activity_frame)
         
         activity_title = QLabel("Recent Activity")
-        activity_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
+        activity_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
         activity_layout.addWidget(activity_title)
         
         # Activity scroll area
         self.activity_scroll = QScrollArea()
         self.activity_scroll.setWidgetResizable(True)
-        self.activity_scroll.setMaximumHeight(200)
+        self.activity_scroll.setMaximumHeight(250)
         self.activity_scroll.setStyleSheet("""
             QScrollArea {
                 background-color: transparent;
@@ -418,11 +468,68 @@ class DashboardPageWidget(QWidget):
         
         content_layout.addLayout(left_column, 1)
         
-        # Right column - Upcoming Deadlines and Chart
+        # Right column - Job Distribution Chart and Upcoming Deadlines
         right_column = QVBoxLayout()
         right_column.setSpacing(10)
         
-        # Upcoming Deadlines
+        # Job Status Chart (moved to top)
+        if CHARTS_AVAILABLE:
+            chart_frame = QFrame()
+            chart_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #2d2d30;
+                    border: 1px solid #464647;
+                    border-radius: 6px;
+                    padding: 10px;
+                }
+            """)
+            chart_layout = QVBoxLayout(chart_frame)
+            
+            chart_title = QLabel("Job Distribution")
+            chart_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
+            chart_layout.addWidget(chart_title)
+            
+            # Create pie chart
+            self.chart = QChart()
+            self.chart.setAnimationOptions(QChart.AnimationOption.SeriesAnimations)
+            self.chart.setBackgroundBrush(QBrush(QColor("#2d2d30")))
+            self.chart.setTitleBrush(QBrush(QColor("#e0e0e0")))
+            self.chart.legend().setLabelColor(QColor("#e0e0e0"))
+            
+            self.chart_view = QChartView(self.chart)
+            self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self.chart_view.setMinimumHeight(200)
+            self.chart_view.setMaximumHeight(250)
+            
+            chart_layout.addWidget(self.chart_view)
+            right_column.addWidget(chart_frame)
+        else:
+            # Fallback when charts are not available
+            fallback_frame = QFrame()
+            fallback_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #2d2d30;
+                    border: 1px solid #464647;
+                    border-radius: 6px;
+                    padding: 10px;
+                }
+            """)
+            fallback_layout = QVBoxLayout(fallback_frame)
+            
+            fallback_title = QLabel("Job Distribution")
+            fallback_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
+            fallback_layout.addWidget(fallback_title)
+            
+            self.job_stats_label = QLabel("Charts not available")
+            self.job_stats_label.setStyleSheet("color: #e0e0e0; font-size: 11px; line-height: 1.5;")
+            self.job_stats_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            self.job_stats_label.setMinimumHeight(150)
+            self.job_stats_label.setMaximumHeight(200)
+            fallback_layout.addWidget(self.job_stats_label)
+            
+            right_column.addWidget(fallback_frame)
+        
+        # Upcoming Deadlines (moved below chart with more space)
         deadlines_frame = QFrame()
         deadlines_frame.setStyleSheet("""
             QFrame {
@@ -435,13 +542,14 @@ class DashboardPageWidget(QWidget):
         deadlines_layout = QVBoxLayout(deadlines_frame)
         
         deadlines_title = QLabel("Upcoming Deadlines")
-        deadlines_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
+        deadlines_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
         deadlines_layout.addWidget(deadlines_title)
         
-        # Deadlines scroll area
+        # Deadlines scroll area with more space
         self.deadlines_scroll = QScrollArea()
         self.deadlines_scroll.setWidgetResizable(True)
-        self.deadlines_scroll.setMaximumHeight(200)
+        self.deadlines_scroll.setMinimumHeight(300)
+        self.deadlines_scroll.setMaximumHeight(400)
         self.deadlines_scroll.setStyleSheet("""
             QScrollArea {
                 background-color: transparent;
@@ -468,66 +576,14 @@ class DashboardPageWidget(QWidget):
         self.deadlines_scroll.setWidget(self.deadlines_widget)
         
         deadlines_layout.addWidget(self.deadlines_scroll)
-        right_column.addWidget(deadlines_frame)
-        
-        # Job Status Chart
-        if CHARTS_AVAILABLE:
-            chart_frame = QFrame()
-            chart_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #2d2d30;
-                    border: 1px solid #464647;
-                    border-radius: 6px;
-                    padding: 10px;
-                }
-            """)
-            chart_layout = QVBoxLayout(chart_frame)
-            
-            chart_title = QLabel("Job Distribution")
-            chart_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
-            chart_layout.addWidget(chart_title)
-            
-            # Create pie chart
-            self.chart = QChart()
-            self.chart.setAnimationOptions(QChart.AnimationOption.SeriesAnimations)
-            self.chart.setBackgroundBrush(QBrush(QColor("#2d2d30")))
-            self.chart.setTitleBrush(QBrush(QColor("#e0e0e0")))
-            self.chart.legend().setLabelColor(QColor("#e0e0e0"))
-            
-            self.chart_view = QChartView(self.chart)
-            self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-            self.chart_view.setMinimumHeight(180)
-            
-            chart_layout.addWidget(self.chart_view)
-            right_column.addWidget(chart_frame)
-        else:
-            # Fallback when charts are not available
-            fallback_frame = QFrame()
-            fallback_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #2d2d30;
-                    border: 1px solid #464647;
-                    border-radius: 6px;
-                    padding: 10px;
-                }
-            """)
-            fallback_layout = QVBoxLayout(fallback_frame)
-            
-            fallback_title = QLabel("Job Distribution")
-            fallback_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
-            fallback_layout.addWidget(fallback_title)
-            
-            self.job_stats_label = QLabel("Charts not available")
-            self.job_stats_label.setStyleSheet("color: #e0e0e0; font-size: 11px; line-height: 1.5;")
-            self.job_stats_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-            self.job_stats_label.setMinimumHeight(140)
-            fallback_layout.addWidget(self.job_stats_label)
-            
-            right_column.addWidget(fallback_frame)
+        right_column.addWidget(deadlines_frame, 1)  # Give it stretch priority
         
         content_layout.addLayout(right_column, 1)
         
         main_layout.addLayout(content_layout, 1)
+        
+        # Add scroll area to the main widget layout
+        widget_layout.addWidget(scroll_area)
     
     def refresh_dashboard(self):
         """Refresh all dashboard data."""
