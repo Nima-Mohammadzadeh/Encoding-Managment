@@ -24,6 +24,7 @@ from PySide6.QtSvg import QSvgRenderer
 from src.tabs.job_page import JobPageWidget
 from src.tabs.archive_page import ArchivePageWidget
 from src.tabs.settings_page import SettingsPageWidget
+from src.tabs.dashboard_page import DashboardPageWidget
 import src.config as config
 
 
@@ -261,12 +262,13 @@ class MainWindow(QMainWindow):
         main_layout.setStretchFactor(self.page_stack, 1)
 
         # Instantiate pages, passing the base_path to them
+        self.dashboard_page = DashboardPageWidget(base_path=self.base_path)
         self.jobs_page = JobPageWidget(base_path=self.base_path)
         self.archive_page = ArchivePageWidget(base_path=self.base_path)
         self.settings_page = SettingsPageWidget()
 
         # Add pages to the stack and create navigation buttons
-        self.add_page("Dashboard", QLabel("This is the Dashboard Page.\\n\\nSummary info will go here."), "dashboard.png")
+        self.add_page("Dashboard", self.dashboard_page, "dashboard.png")
         self.add_page("Jobs", self.jobs_page, "customers.png")
         self.add_page("Settings", self.settings_page, "settings.png")
         self.add_page("Archive", self.archive_page, "Database.png")
@@ -281,6 +283,11 @@ class MainWindow(QMainWindow):
         # Connect other signals
         self.jobs_page.job_to_archive.connect(self.archive_page.add_archived_job)
         self.settings_page.active_jobs_source_changed.connect(self.jobs_page.update_active_jobs_source_directory)
+        
+        # Connect dashboard signals
+        self.dashboard_page.navigate_to_jobs.connect(lambda: self.switch_page(1))
+        self.dashboard_page.navigate_to_archive.connect(lambda: self.switch_page(3))
+        self.dashboard_page.create_new_job.connect(self.handle_create_new_job)
 
         # Set central widget
         central_widget = QWidget()
@@ -305,6 +312,11 @@ class MainWindow(QMainWindow):
         """Switch page based on navigation selection."""
         self.page_stack.setCurrentIndex(index)
         self.nav_panel.set_current_button(index)
+    
+    def handle_create_new_job(self):
+        """Handle create new job from dashboard - switch to jobs page and open wizard."""
+        self.switch_page(1)  # Switch to jobs page
+        self.jobs_page.open_new_job_wizard()  # Open the new job wizard
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
