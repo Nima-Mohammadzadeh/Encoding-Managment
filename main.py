@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
 import pymupdf, shutil, os, sys
 from qt_material import apply_stylesheet
 from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QIcon, QPixmap, QFont
+from PySide6.QtGui import QIcon, QPixmap, QFont, QPainter
+from PySide6.QtSvg import QSvgRenderer
 
 # Import the widgets from their new locations
 from src.tabs.job_page import JobPageWidget
@@ -44,7 +45,7 @@ class CollapsibleNavButton(QPushButton):
         if os.path.exists(self.icon_path):
             icon = QIcon(self.icon_path)
             self.setIcon(icon)
-            self.setIconSize(QSize(20, 20))
+            self.setIconSize(QSize(24, 24))
         
         if not self.is_collapsed:
             self.setText(self.text)
@@ -54,6 +55,7 @@ class CollapsibleNavButton(QPushButton):
                     padding-left: 15px;
                     border: none;
                     background-color: transparent;
+                    font-size: 14px;
                 }
                 QPushButton:hover {
                     background-color: rgba(255, 255, 255, 0.1);
@@ -70,6 +72,7 @@ class CollapsibleNavButton(QPushButton):
                     text-align: center;
                     border: none;
                     background-color: transparent;
+                    font-size: 14px;
                 }
                 QPushButton:hover {
                     background-color: rgba(255, 255, 255, 0.1);
@@ -90,7 +93,7 @@ class CollapsibleNavigationPanel(QWidget):
         super().__init__(parent)
         self.is_collapsed = False
         self.expanded_width = 200
-        self.collapsed_width = 60
+        self.collapsed_width = 90  # Adjusted for better spacing
         
         self.setFixedWidth(self.expanded_width)
         self.setStyleSheet("""
@@ -100,27 +103,22 @@ class CollapsibleNavigationPanel(QWidget):
             }
         """)
         
-        # Main layout
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         
-        # Logo and header area
         self.create_header()
         
-        # Navigation buttons area
         self.nav_frame = QFrame()
         self.nav_layout = QVBoxLayout(self.nav_frame)
         self.nav_layout.setContentsMargins(5, 10, 5, 10)
         self.nav_layout.setSpacing(5)
         
-        self.main_layout.addWidget(self.nav_frame, 1)  # Give it stretch factor to fill space
+        self.main_layout.addWidget(self.nav_frame, 1)
         
-        # Store navigation buttons
         self.nav_buttons = []
         
     def create_header(self):
-        # Header frame
         self.header_frame = QFrame()
         self.header_frame.setFixedHeight(80)
         self.header_frame.setStyleSheet("""
@@ -131,42 +129,11 @@ class CollapsibleNavigationPanel(QWidget):
         """)
         
         header_layout = QHBoxLayout(self.header_frame)
-        header_layout.setContentsMargins(10, 10, 10, 10)
+        header_layout.setContentsMargins(5, 5, 5, 5)
+        header_layout.setSpacing(5)
         
-        # Logo/App name
-        self.logo_label = QLabel("WO")  # Workflow Optimizer abbreviated
-        self.logo_label.setStyleSheet("""
-            QLabel {
-                color: #0078d4;
-                font-size: 24px;
-                font-weight: bold;
-                background-color: transparent;
-                border: 2px solid #0078d4;
-                border-radius: 20px;
-                padding: 5px;
-                min-width: 40px;
-                max-width: 40px;
-                min-height: 40px;
-                max-height: 40px;
-            }
-        """)
-        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # App title
-        self.title_label = QLabel("Workflow\nOptimizer")
-        self.title_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 12px;
-                font-weight: bold;
-                background-color: transparent;
-                margin-left: 10px;
-            }
-        """)
-        
-        header_layout.addWidget(self.logo_label)
-        header_layout.addWidget(self.title_label)
-        header_layout.addStretch()
+        # Logo
+        self.logo_label = QLabel()
         
         # Collapse button
         self.collapse_btn = QPushButton()
@@ -175,7 +142,6 @@ class CollapsibleNavigationPanel(QWidget):
             self.collapse_btn.setIcon(QIcon(collapse_icon_path))
         else:
             self.collapse_btn.setText("≡")
-        
         self.collapse_btn.setFixedSize(30, 30)
         self.collapse_btn.setStyleSheet("""
             QPushButton {
@@ -188,11 +154,14 @@ class CollapsibleNavigationPanel(QWidget):
             }
         """)
         self.collapse_btn.clicked.connect(self.toggle_collapse)
-        
+
+        header_layout.addWidget(self.logo_label)
+        header_layout.addStretch()
         header_layout.addWidget(self.collapse_btn)
-        
+
         self.main_layout.addWidget(self.header_frame)
-    
+        self.update_logo()
+
     def add_nav_button(self, text, icon_name):
         icon_path = os.path.join("src", "icons", icon_name)
         button = CollapsibleNavButton(text, icon_path)
@@ -204,30 +173,59 @@ class CollapsibleNavigationPanel(QWidget):
         return button
     
     def finalize_navigation(self):
-        """Add stretch to keep buttons at top after all buttons are added"""
         self.nav_layout.addStretch()
     
     def toggle_collapse(self):
         self.is_collapsed = not self.is_collapsed
         
-        # Update button states
         for button in self.nav_buttons:
             button.set_collapsed(self.is_collapsed)
         
-        # Update header visibility
         if self.is_collapsed:
-            self.title_label.hide()
             self.setFixedWidth(self.collapsed_width)
         else:
-            self.title_label.show()
             self.setFixedWidth(self.expanded_width)
-    
+            
+        self.update_logo()
+
+    def update_logo(self):
+        logo_path = os.path.join("src", "icons", "logo.png")
+        
+        if self.is_collapsed:
+            size = 45
+        else:
+            size = 60
+
+        if os.path.exists(logo_path):
+            pixmap = QPixmap(logo_path)
+            scaled_pixmap = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.logo_label.setPixmap(scaled_pixmap)
+            self.logo_label.setStyleSheet("""
+                QLabel {
+                    background-color: transparent;
+                    border: none;
+                }
+            """)
+            self.logo_label.setFixedSize(size, size)
+        else:
+            self.logo_label.setText("ST")
+            self.logo_label.setStyleSheet(f"""
+                QLabel {{
+                    color: #0078d4;
+                    font-size: {size / 2}px;
+                    font-weight: bold;
+                    background-color: transparent;
+                    border: none;
+                }}
+            """)
+            self.logo_label.setFixedSize(size, size)
+        
+        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
     def set_current_button(self, index):
-        # Uncheck all buttons
         for button in self.nav_buttons:
             button.setChecked(False)
         
-        # Check the selected button
         if 0 <= index < len(self.nav_buttons):
             self.nav_buttons[index].setChecked(True)
 
@@ -236,7 +234,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Workflow Optimizer")
+        self.setWindowTitle("Starport Tech")
         self.setGeometry(50, 50, 1200, 650)
         self.setMinimumSize(1200, 650)
 
@@ -314,3 +312,4 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
