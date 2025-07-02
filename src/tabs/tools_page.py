@@ -6,6 +6,9 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon
 import os
 
+from src.widgets.database_generator_dialog import DatabaseGeneratorDialog
+from src.widgets.checklist_generator_dialog import ChecklistGeneratorDialog
+
 
 class ToolCard(QFrame):
     """Individual tool card widget for displaying a tool with icon and description"""
@@ -245,7 +248,8 @@ class ToolsPageWidget(QWidget):
     def open_database_generator(self):
         """Open the Database Generator tool"""
         print("Opening Database Generator...")
-        self.show_tool_placeholder("Database Generator")
+        dialog = DatabaseGeneratorDialog(self)
+        dialog.exec()
         
     def open_roll_tracker(self):
         """Open the Roll Tracker tool"""
@@ -255,7 +259,8 @@ class ToolsPageWidget(QWidget):
     def open_checklist_tool(self):
         """Open the Checklist tool"""
         print("Opening Checklist tool...")
-        self.show_tool_placeholder("Checklist")
+        dialog = ChecklistGeneratorDialog(self.base_path, self)
+        dialog.exec()
         
     def open_upc_validator(self):
         """Open the UPC Validator tool"""
