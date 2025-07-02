@@ -437,7 +437,7 @@ class DashboardPageWidget(QWidget):
         # Activity scroll area
         self.activity_scroll = QScrollArea()
         self.activity_scroll.setWidgetResizable(True)
-        self.activity_scroll.setMaximumHeight(250)
+        self.activity_scroll.setMaximumHeight(350)
         self.activity_scroll.setStyleSheet("""
             QScrollArea {
                 background-color: transparent;
@@ -825,7 +825,7 @@ class DashboardPageWidget(QWidget):
         else:
             # Show empty state
             empty_label = QLabel("No recent activity")
-            empty_label.setStyleSheet("color: #666666; font-size: 12px; padding: 20px;")
+            empty_label.setStyleSheet("color: #666666; font-size: 12px; padding: 1px;")
             empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.activity_layout.addWidget(empty_label)
         
