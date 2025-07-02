@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QGridLayout, QFrame, QScrollArea, QSizePolicy
+    QGroupBox, QGridLayout, QFrame, QScrollArea, QSizePolicy, QMessageBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon
@@ -80,7 +80,7 @@ class ToolsPageWidget(QWidget):
         title_label.setFont(title_font)
         
         # Subtitle
-        subtitle_label = QLabel("Quick access to productivity tools")
+        subtitle_label = QLabel("Essential workflow tools for encoding and data management")
         subtitle_label.setStyleSheet("color: #888888;")
         
         header_layout.addWidget(title_label)
@@ -104,53 +104,31 @@ class ToolsPageWidget(QWidget):
         tools_layout = QVBoxLayout(tools_container)
         tools_layout.setSpacing(20)
         
-        # Data Processing Tools Section
-        data_section = self.create_tool_section(
-            "Data Processing Tools",
+        # Primary Tools Section
+        primary_section = self.create_tool_section(
+            "Primary Tools",
             [
-                ("Batch File Renamer", "Rename multiple files at once using patterns and rules"),
-                ("CSV Merger", "Combine multiple CSV files into a single file"),
-                ("Data Validator", "Validate data formats and check for errors"),
-                ("Excel Processor", "Process and transform Excel files in bulk")
+                ("Database Generator", "Generate EPC database files with custom parameters and serial ranges"),
+                ("Roll Tracker", "Track and manage label roll inventory and usage statistics"),
+                ("Checklist", "Create and manage job checklists with customizable templates"),
+                ("Global Search", "Search across all jobs, archives, and data files for specific information")
             ]
         )
-        tools_layout.addWidget(data_section)
+        tools_layout.addWidget(primary_section)
         
-        # File Management Tools Section
-        file_section = self.create_tool_section(
-            "File Management Tools",
+        # Validation Tools Section
+        validation_section = self.create_tool_section(
+            "Validation Tools",
             [
-                ("Duplicate Finder", "Find and remove duplicate files in directories"),
-                ("Folder Organizer", "Organize files into folders based on rules"),
-                ("Archive Extractor", "Extract multiple archive files at once"),
-                ("File Compressor", "Compress files and folders with various formats")
+                ("UPC Validator", "Validate UPC codes for format compliance and check digit accuracy"),
+                ("EPC Validator", "Validate EPC codes and perform round-trip UPC conversion testing")
             ]
         )
-        tools_layout.addWidget(file_section)
+        tools_layout.addWidget(validation_section)
         
-        # Encoding Tools Section
-        encoding_section = self.create_tool_section(
-            "Encoding Tools",
-            [
-                ("Barcode Generator", "Generate barcodes in various formats"),
-                ("QR Code Creator", "Create QR codes with custom data"),
-                ("EPC Calculator", "Calculate and validate EPC codes"),
-                ("Serial Number Generator", "Generate sequential serial numbers")
-            ]
-        )
-        tools_layout.addWidget(encoding_section)
-        
-        # Utility Tools Section
-        utility_section = self.create_tool_section(
-            "Utility Tools",
-            [
-                ("Text Replacer", "Find and replace text across multiple files"),
-                ("Image Resizer", "Resize multiple images at once"),
-                ("PDF Merger", "Combine multiple PDF files"),
-                ("Format Converter", "Convert between different file formats")
-            ]
-        )
-        tools_layout.addWidget(utility_section)
+        # Deprecated Tools Section
+        deprecated_section = self.create_deprecated_tools_section()
+        tools_layout.addWidget(deprecated_section)
         
         tools_layout.addStretch()
         
@@ -192,33 +170,104 @@ class ToolsPageWidget(QWidget):
         
         section_group.setLayout(grid_layout)
         return section_group
+    
+    def create_deprecated_tools_section(self):
+        """Create the deprecated tools section"""
+        section_group = QGroupBox("Deprecated Tools")
+        section_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid #4a4a4a;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                color: #888888;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 10px 0 10px;
+                color: #888888;
+            }
+        """)
+        
+        # Layout for deprecated tools
+        layout = QVBoxLayout()
+        layout.setContentsMargins(15, 20, 15, 15)
+        
+        # Placeholder message
+        placeholder_label = QLabel("Deprecated tools will be listed here.\nThese are legacy tools that are no longer actively maintained.")
+        placeholder_label.setStyleSheet("""
+            color: #666666;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        """)
+        placeholder_label.setAlignment(Qt.AlignCenter)
+        placeholder_label.setWordWrap(True)
+        
+        layout.addWidget(placeholder_label)
+        section_group.setLayout(layout)
+        
+        return section_group
         
     def handle_tool_click(self, tool_name):
         """Handle click on a tool card"""
         print(f"Tool clicked: {tool_name}")
-        # This is where you would implement the logic to open specific tools
-        # For now, it's a placeholder that can be expanded later
         
-        # Example structure for future implementation:
-        if tool_name == "Batch File Renamer":
-            self.open_batch_renamer()
-        elif tool_name == "CSV Merger":
-            self.open_csv_merger()
-        elif tool_name == "Barcode Generator":
-            self.open_barcode_generator()
-        # ... etc for other tools
+        # Route to specific tool implementations
+        if tool_name == "Database Generator":
+            self.open_database_generator()
+        elif tool_name == "Roll Tracker":
+            self.open_roll_tracker()
+        elif tool_name == "Checklist":
+            self.open_checklist_tool()
+        elif tool_name == "UPC Validator":
+            self.open_upc_validator()
+        elif tool_name == "EPC Validator":
+            self.open_epc_validator()
+        elif tool_name == "Global Search":
+            self.open_global_search()
         else:
-            print(f"Tool '{tool_name}' not yet implemented")
+            self.show_tool_placeholder(tool_name)
     
-    # Placeholder methods for tools - to be implemented
-    def open_batch_renamer(self):
-        print("Opening Batch File Renamer...")
-        # Future implementation
+    def show_tool_placeholder(self, tool_name):
+        """Show placeholder message for tools not yet implemented"""
+        QMessageBox.information(
+            self,
+            "Tool Coming Soon",
+            f"The '{tool_name}' tool is currently under development.\n\n"
+            f"This feature will be available in a future update."
+        )
+    
+    # Tool implementation methods - to be developed
+    def open_database_generator(self):
+        """Open the Database Generator tool"""
+        print("Opening Database Generator...")
+        self.show_tool_placeholder("Database Generator")
         
-    def open_csv_merger(self):
-        print("Opening CSV Merger...")
-        # Future implementation
+    def open_roll_tracker(self):
+        """Open the Roll Tracker tool"""
+        print("Opening Roll Tracker...")
+        self.show_tool_placeholder("Roll Tracker")
         
-    def open_barcode_generator(self):
-        print("Opening Barcode Generator...")
-        # Future implementation 
+    def open_checklist_tool(self):
+        """Open the Checklist tool"""
+        print("Opening Checklist tool...")
+        self.show_tool_placeholder("Checklist")
+        
+    def open_upc_validator(self):
+        """Open the UPC Validator tool"""
+        print("Opening UPC Validator...")
+        self.show_tool_placeholder("UPC Validator")
+        
+    def open_epc_validator(self):
+        """Open the EPC Validator tool"""
+        print("Opening EPC Validator...")
+        self.show_tool_placeholder("EPC Validator")
+        
+    def open_global_search(self):
+        """Open the Global Search tool"""
+        print("Opening Global Search...")
+        self.show_tool_placeholder("Global Search") 
