@@ -311,21 +311,21 @@ class DashboardPageWidget(QWidget):
         stats_layout = QHBoxLayout()
         stats_layout.setSpacing(12)
         
-        self.active_jobs_card = StatCard("Active Jobs", "0", color="#0078d4")
-        self.active_jobs_card.clicked.connect(self.navigate_to_jobs.emit)
-        stats_layout.addWidget(self.active_jobs_card)
+        self.jobs_backlog_card = StatCard("Jobs in Backlog", "0", color="#0078d4")
+        self.jobs_backlog_card.clicked.connect(self.navigate_to_jobs.emit)
+        stats_layout.addWidget(self.jobs_backlog_card)
         
-        self.due_today_card = StatCard("Due Today", "0", color="#e74c3c")
-        stats_layout.addWidget(self.due_today_card)
-        
-        self.overdue_card = StatCard("Overdue", "0", color="#e74c3c")
-        stats_layout.addWidget(self.overdue_card)
+        self.total_backlog_qty_card = StatCard("Total Backlog Qty", "0", color="#f39c12")
+        stats_layout.addWidget(self.total_backlog_qty_card)
         
         self.completed_week_card = StatCard("Completed This Week", "0", color="#27ae60")
         stats_layout.addWidget(self.completed_week_card)
         
-        self.total_quantity_card = StatCard("Total Active Qty", "0", color="#3498db")
-        stats_layout.addWidget(self.total_quantity_card)
+        self.completed_qty_week_card = StatCard("Completed Qty This Week", "0", color="#27ae60")
+        stats_layout.addWidget(self.completed_qty_week_card)
+        
+        self.overdue_jobs_card = StatCard("Overdue Jobs", "0", color="#e74c3c")
+        stats_layout.addWidget(self.overdue_jobs_card)
         
         main_layout.addLayout(stats_layout)
         
@@ -651,62 +651,79 @@ class DashboardPageWidget(QWidget):
     
     def update_statistics(self, active_jobs, archived_jobs):
         """Update statistics cards."""
-        # Active jobs count
-        self.active_jobs_card.update_value(len(active_jobs))
+        # Jobs in Backlog (was Active Jobs)
+        self.jobs_backlog_card.update_value(len(active_jobs))
         
-        # Due today and overdue counts
+        # Calculate total backlog quantity
+        total_backlog_quantity = 0
+        overdue_count = 0
         today = datetime.now().date()
-        due_today = 0
-        overdue = 0
-        total_quantity = 0
         
         for job in active_jobs:
-            # Count quantities
+            # Count quantities for backlog
             qty_str = job.get("Quantity", job.get("Qty", "0"))
             if isinstance(qty_str, str):
                 qty_str = qty_str.replace(',', '')
             try:
-                total_quantity += int(qty_str)
+                total_backlog_quantity += int(qty_str)
             except:
                 pass
                 
-            # Check due dates
+            # Check for overdue jobs
             due_date_str = job.get("Due Date", "")
             if due_date_str:
                 try:
                     due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
-                    if due_date == today:
-                        due_today += 1
-                    elif due_date < today:
-                        overdue += 1
+                    if due_date < today:
+                        overdue_count += 1
                 except:
                     pass
-                    
-        self.due_today_card.update_value(due_today)
-        self.overdue_card.update_value(overdue)
         
-        # Format total quantity with commas
-        if total_quantity >= 1000000:
-            qty_display = f"{total_quantity/1000000:.1f}M"
-        elif total_quantity >= 1000:
-            qty_display = f"{total_quantity/1000:.0f}K"
+        # Format total backlog quantity with commas
+        if total_backlog_quantity >= 1000000:
+            qty_display = f"{total_backlog_quantity/1000000:.1f}M"
+        elif total_backlog_quantity >= 1000:
+            qty_display = f"{total_backlog_quantity/1000:.0f}K"
         else:
-            qty_display = str(total_quantity)
-        self.total_quantity_card.update_value(qty_display)
+            qty_display = f"{total_backlog_quantity:,}"
+        self.total_backlog_qty_card.update_value(qty_display)
         
-        # Completed this week
+        # Completed this week (jobs count) and completed quantity this week
         week_start = today - timedelta(days=today.weekday())
-        completed_week = 0
+        completed_week_count = 0
+        completed_week_qty = 0
+        
         for job in archived_jobs:
             archived_date_str = job.get("dateArchived", "")
             if archived_date_str:
                 try:
                     archived_date = datetime.strptime(archived_date_str.split()[0], "%Y-%m-%d").date()
                     if archived_date >= week_start:
-                        completed_week += 1
+                        completed_week_count += 1
+                        # Add up the quantities
+                        qty_str = job.get("Quantity", job.get("Qty", "0"))
+                        if isinstance(qty_str, str):
+                            qty_str = qty_str.replace(',', '')
+                        try:
+                            completed_week_qty += int(qty_str)
+                        except:
+                            pass
                 except:
                     pass
-        self.completed_week_card.update_value(completed_week)
+        
+        self.completed_week_card.update_value(completed_week_count)
+        
+        # Format completed quantity this week
+        if completed_week_qty >= 1000000:
+            qty_week_display = f"{completed_week_qty/1000000:.1f}M"
+        elif completed_week_qty >= 1000:
+            qty_week_display = f"{completed_week_qty/1000:.0f}K"
+        else:
+            qty_week_display = f"{completed_week_qty:,}"
+        self.completed_qty_week_card.update_value(qty_week_display)
+        
+        # Overdue jobs count
+        self.overdue_jobs_card.update_value(overdue_count)
     
     def update_activity_feed(self, active_jobs, archived_jobs):
         """Update the activity feed with recent events."""

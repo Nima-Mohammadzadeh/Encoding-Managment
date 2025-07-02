@@ -124,7 +124,7 @@ class CollapsibleNavigationPanel(QWidget):
         self.header_frame.setFixedHeight(80)
         self.header_frame.setStyleSheet("""
             QFrame {
-                background-color: #1e1e1e;
+                background-color: #2d2d30;
                 border-bottom: 1px solid #464647;
             }
         """)
