@@ -8,6 +8,7 @@ import os
 
 from src.widgets.database_generator_dialog import DatabaseGeneratorDialog
 from src.widgets.checklist_generator_dialog import ChecklistGeneratorDialog
+from src.widgets.roll_tracker_dialog import RollTrackerDialog
 
 
 class ToolCard(QFrame):
@@ -254,7 +255,8 @@ class ToolsPageWidget(QWidget):
     def open_roll_tracker(self):
         """Open the Roll Tracker tool"""
         print("Opening Roll Tracker...")
-        self.show_tool_placeholder("Roll Tracker")
+        dialog = RollTrackerDialog(self)
+        dialog.exec()
         
     def open_checklist_tool(self):
         """Open the Checklist tool"""
