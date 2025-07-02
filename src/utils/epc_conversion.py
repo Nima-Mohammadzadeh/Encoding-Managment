@@ -48,9 +48,151 @@ def generate_epc(upc, serial_number):
     return epc_hex
 
 
+def hex_to_bin(hex_str):
+    """Convert hexadecimal string to binary."""
+    return bin(int(hex_str, 16))[2:].zfill(len(hex_str) * 4)
+
+
+def bin_to_dec(binary_str):
+    """Convert binary string to decimal."""
+    return int(binary_str, 2)
+
+
+def reverse_epc_to_upc_and_serial(epc_hex):
+    """
+    Reverse EPC hex value back to UPC and serial number.
+    
+    Args:
+        epc_hex (str): EPC hex value
+        
+    Returns:
+        tuple: (upc, serial_number) or (None, None) if invalid
+    """
+    try:
+        # Convert hex to binary
+        epc_binary = hex_to_bin(epc_hex)
+        
+        # Check if we have enough bits (should be 96 bits total)
+        if len(epc_binary) != 96:
+            return None, None
+        
+        # Extract parts according to EPC structure
+        header = epc_binary[0:8]
+        filter_value = epc_binary[8:11]
+        partition = epc_binary[11:14]
+        gs1_binary = epc_binary[14:38]  # 24 bits
+        item_reference_binary = epc_binary[38:58]  # 20 bits
+        serial_binary = epc_binary[58:96]  # 38 bits
+        
+        # Validate expected values
+        if header != "00110000" or filter_value != "001" or partition != "101":
+            return None, None
+        
+        # Convert binaries back to decimal
+        gs1_company_prefix = bin_to_dec(gs1_binary)
+        item_reference = bin_to_dec(item_reference_binary)
+        serial_number = bin_to_dec(serial_binary)
+        
+        # Reconstruct UPC from GS1 company prefix and item reference
+        # Remove the leading "0" from GS1 company prefix to get original 6 digits
+        gs1_str = str(gs1_company_prefix).zfill(7)[1:]  # Remove leading 0, pad to 6 digits
+        item_ref_str = str(item_reference).zfill(5)  # Pad to 5 digits
+        
+        # Get the check digit (last digit of original UPC)
+        # We need to calculate it since it's not stored in the EPC
+        partial_upc = gs1_str + item_ref_str
+        if len(partial_upc) != 11:
+            return None, None
+        
+        # Calculate check digit
+        check_digit = calculate_upc_check_digit(partial_upc)
+        upc = partial_upc + str(check_digit)
+        
+        return upc, serial_number
+        
+    except Exception:
+        return None, None
+
+
+def calculate_upc_check_digit(partial_upc):
+    """
+    Calculate UPC check digit for 11-digit partial UPC.
+    
+    Args:
+        partial_upc (str): 11-digit partial UPC
+        
+    Returns:
+        int: Check digit (0-9)
+    """
+    if len(partial_upc) != 11:
+        raise ValueError("Partial UPC must be 11 digits")
+    
+    # UPC check digit calculation
+    odd_sum = sum(int(partial_upc[i]) for i in range(0, 11, 2))  # Positions 1, 3, 5, 7, 9, 11
+    even_sum = sum(int(partial_upc[i]) for i in range(1, 11, 2))  # Positions 2, 4, 6, 8, 10
+    
+    total = (odd_sum * 3) + even_sum
+    check_digit = (10 - (total % 10)) % 10
+    
+    return check_digit
+
+
+def validate_upc_with_round_trip(upc):
+    """
+    Validate UPC by performing round-trip conversion: UPC -> EPC -> UPC.
+    
+    Args:
+        upc (str): UPC to validate
+        
+    Returns:
+        tuple: (is_valid, details) where details contains validation info
+    """
+    # Basic format validation first
+    if not upc or len(upc) != 12 or not upc.isdigit():
+        return False, {"error": "UPC must be exactly 12 digits"}
+    
+    try:
+        # Generate EPC from UPC with a test serial number
+        test_serial = 1000
+        epc_hex = generate_epc(upc, test_serial)
+        
+        # Convert EPC back to UPC and serial
+        recovered_upc, recovered_serial = reverse_epc_to_upc_and_serial(epc_hex)
+        
+        # Check if round-trip conversion matches
+        if recovered_upc is None or recovered_serial is None:
+            return False, {"error": "Failed to reverse EPC conversion"}
+        
+        if recovered_upc != upc:
+            return False, {
+                "error": "Round-trip validation failed", 
+                "original_upc": upc,
+                "recovered_upc": recovered_upc,
+                "epc_generated": epc_hex
+            }
+        
+        if recovered_serial != test_serial:
+            return False, {
+                "error": "Serial number mismatch in round-trip validation",
+                "original_serial": test_serial,
+                "recovered_serial": recovered_serial
+            }
+        
+        return True, {
+            "success": "UPC validation successful",
+            "original_upc": upc,
+            "recovered_upc": recovered_upc,
+            "test_epc": epc_hex,
+            "test_serial": test_serial
+        }
+        
+    except Exception as e:
+        return False, {"error": f"Validation error: {str(e)}"}
+
+
 def validate_upc(upc):
     """
-    Validate UPC format.
+    Validate UPC format (basic validation).
     
     Args:
         upc (str): UPC to validate

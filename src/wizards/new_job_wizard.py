@@ -3,7 +3,7 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QDateEdit, QWizard, QWizardPage, QVBoxLayout, QFormLayout, QLineEdit, 
     QComboBox, QCheckBox, QPushButton, QLabel, QFileDialog, QSizePolicy, QWidget, QMessageBox, QHBoxLayout,
-    QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox
+    QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox, QScrollArea, QFrame
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QValidator, QRegularExpressionValidator
@@ -11,9 +11,9 @@ import re
 from qt_material import apply_stylesheet
 import src.config as config
 from src.utils.epc_conversion import (
-    validate_upc, generate_epc_preview_data, calculate_total_quantity_with_percentages,
+    validate_upc, validate_upc_with_round_trip, generate_epc_preview_data, calculate_total_quantity_with_percentages,
     populate_customer_dropdown_from_templates, populate_label_sizes_for_customer,
-    get_template_path
+    get_template_path, reverse_epc_to_upc_and_serial
 )
 
 class QuantityLineEdit(QLineEdit):
@@ -156,7 +156,8 @@ class NewJobWizard(QWizard):
         self.base_path = base_path if base_path else os.path.dirname(os.path.abspath(__file__))
         self.setWindowTitle("New Job Wizard")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(700, 600)  # Increased minimum size
+        self.resize(800, 700)  # Set initial size
 
         self.job_data = {}
 
@@ -471,11 +472,55 @@ class EPCDatabasePage(QWizardPage):
     def __init__(self, parent=None, base_path=None):
         super().__init__(parent)
         self.base_path = base_path
-        self.setTitle("Step 3: EPC Database Generation (Optional)")
-        self.setSubTitle("Configure EPC database generation settings and preview data.")
+        self.setTitle("Step 3: EPC Database Generation & UPC Validation")
+        self.setSubTitle("Configure EPC database generation settings, validate UPC, and preview data.")
 
         # Main layout
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # Content widget for the scroll area
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setSpacing(15)
+
+        # UPC Validation Section
+        self.validation_group = QGroupBox("UPC Validation")
+        validation_layout = QVBoxLayout(self.validation_group)
+        
+        # Validation controls
+        validation_controls_layout = QHBoxLayout()
+        self.validate_upc_button = QPushButton("Validate UPC")
+        self.validate_upc_button.clicked.connect(self.validate_current_upc)
+        self.validate_upc_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 8px 16px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        validation_controls_layout.addWidget(self.validate_upc_button)
+        validation_controls_layout.addStretch()
+        validation_layout.addLayout(validation_controls_layout)
+        
+        # Validation results display
+        self.validation_result_display = QTextEdit()
+        self.validation_result_display.setMaximumHeight(120)
+        self.validation_result_display.setReadOnly(True)
+        self.validation_result_display.setPlaceholderText("UPC validation results will appear here...")
+        validation_layout.addWidget(self.validation_result_display)
+        
+        layout.addWidget(self.validation_group)
 
         # Enable EPC database generation checkbox
         self.enable_epc_generation = QCheckBox("Generate EPC Database Files")
@@ -520,10 +565,30 @@ class EPCDatabasePage(QWizardPage):
         self.preview_group.setEnabled(False)
         preview_layout = QVBoxLayout(self.preview_group)
 
-        # Preview button
+        # Preview controls
+        preview_controls_layout = QHBoxLayout()
         self.preview_button = QPushButton("Generate Preview")
         self.preview_button.clicked.connect(self.generate_preview)
-        preview_layout.addWidget(self.preview_button)
+        
+        # Reverse validation button
+        self.reverse_validate_button = QPushButton("Test Reverse Validation")
+        self.reverse_validate_button.clicked.connect(self.test_reverse_validation)
+        self.reverse_validate_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        
+        preview_controls_layout.addWidget(self.preview_button)
+        preview_controls_layout.addWidget(self.reverse_validate_button)
+        preview_controls_layout.addStretch()
+        preview_layout.addLayout(preview_controls_layout)
 
         # Preview table
         self.preview_table = QTableWidget()
@@ -534,6 +599,18 @@ class EPCDatabasePage(QWizardPage):
         preview_layout.addWidget(self.preview_table)
 
         layout.addWidget(self.preview_group)
+
+        # Reverse Validation Results
+        self.reverse_validation_group = QGroupBox("Round-Trip Validation Results")
+        reverse_layout = QVBoxLayout(self.reverse_validation_group)
+        
+        self.reverse_validation_display = QTextEdit()
+        self.reverse_validation_display.setMaximumHeight(100)
+        self.reverse_validation_display.setReadOnly(True)
+        self.reverse_validation_display.setPlaceholderText("Round-trip validation results will appear here...")
+        reverse_layout.addWidget(self.reverse_validation_display)
+        
+        layout.addWidget(self.reverse_validation_group)
 
         # Template information
         self.template_info_group = QGroupBox("Template Information")
@@ -552,7 +629,117 @@ class EPCDatabasePage(QWizardPage):
         self.error_label.hide()
         layout.addWidget(self.error_label)
 
-        layout.addStretch()
+        # Set the content widget to the scroll area
+        scroll_area.setWidget(content_widget)
+        main_layout.addWidget(scroll_area)
+
+    def validate_current_upc(self):
+        """Validate the UPC from the previous page using round-trip conversion."""
+        try:
+            wizard = self.wizard()
+            encoding_page = wizard.page(wizard.pageIds()[1])  # EncodingPage
+            upc = encoding_page.upc_number.get_upc_value()
+            
+            if not upc:
+                self.validation_result_display.setHtml("""
+                <p style='color: red; font-weight: bold;'>❌ No UPC entered</p>
+                <p>Please enter a UPC on the previous page before validation.</p>
+                """)
+                return
+            
+            # Perform round-trip validation
+            is_valid, details = validate_upc_with_round_trip(upc)
+            
+            if is_valid:
+                self.validation_result_display.setHtml(f"""
+                <p style='color: green; font-weight: bold;'>✅ UPC Validation Successful</p>
+                <p><strong>UPC:</strong> {details['original_upc']}</p>
+                <p><strong>Test EPC Generated:</strong> {details['test_epc']}</p>
+                <p><strong>Recovered UPC:</strong> {details['recovered_upc']}</p>
+                <p><strong>Status:</strong> {details['success']}</p>
+                """)
+            else:
+                error_msg = details.get('error', 'Unknown error')
+                
+                if 'Round-trip validation failed' in error_msg:
+                    self.validation_result_display.setHtml(f"""
+                    <p style='color: red; font-weight: bold;'>❌ Invalid UPC - Round-trip Validation Failed</p>
+                    <p><strong>Original UPC:</strong> {details.get('original_upc', 'N/A')}</p>
+                    <p><strong>Recovered UPC:</strong> {details.get('recovered_upc', 'N/A')}</p>
+                    <p><strong>Generated EPC:</strong> {details.get('epc_generated', 'N/A')}</p>
+                    <p style='color: orange;'><strong>Issue:</strong> The UPC does not convert back to itself when processed through EPC conversion. This indicates an invalid UPC format.</p>
+                    """)
+                else:
+                    self.validation_result_display.setHtml(f"""
+                    <p style='color: red; font-weight: bold;'>❌ UPC Validation Failed</p>
+                    <p><strong>Error:</strong> {error_msg}</p>
+                    """)
+                    
+        except Exception as e:
+            self.validation_result_display.setHtml(f"""
+            <p style='color: red; font-weight: bold;'>❌ Validation Error</p>
+            <p><strong>Error:</strong> {str(e)}</p>
+            """)
+
+    def test_reverse_validation(self):
+        """Test reverse validation by converting EPCs from the preview table back to UPC."""
+        try:
+            if self.preview_table.rowCount() == 0:
+                self.reverse_validation_display.setHtml("""
+                <p style='color: orange;'>⚠️ No preview data available. Generate preview first.</p>
+                """)
+                return
+            
+            # Get a few EPCs from the preview table
+            test_results = []
+            test_count = min(3, self.preview_table.rowCount())  # Test first 3 rows
+            
+            for row in range(test_count):
+                original_upc = self.preview_table.item(row, 0).text()
+                original_serial = int(self.preview_table.item(row, 1).text())
+                epc_hex = self.preview_table.item(row, 2).text()
+                
+                # Reverse the EPC
+                recovered_upc, recovered_serial = reverse_epc_to_upc_and_serial(epc_hex)
+                
+                success = (recovered_upc == original_upc and recovered_serial == original_serial)
+                test_results.append({
+                    'row': row + 1,
+                    'original_upc': original_upc,
+                    'original_serial': original_serial,
+                    'epc': epc_hex,
+                    'recovered_upc': recovered_upc,
+                    'recovered_serial': recovered_serial,
+                    'success': success
+                })
+            
+            # Generate results display
+            html_content = []
+            all_passed = all(result['success'] for result in test_results)
+            
+            if all_passed:
+                html_content.append("<p style='color: green; font-weight: bold;'>✅ All reverse validations passed!</p>")
+            else:
+                html_content.append("<p style='color: red; font-weight: bold;'>❌ Some reverse validations failed!</p>")
+            
+            for result in test_results:
+                status = "✅" if result['success'] else "❌"
+                color = "green" if result['success'] else "red"
+                html_content.append(f"""
+                <p style='color: {color};'><strong>Row {result['row']}:</strong> {status}</p>
+                <p style='margin-left: 20px; font-size: 11px;'>
+                UPC: {result['original_upc']} → {result['recovered_upc']}<br/>
+                Serial: {result['original_serial']} → {result['recovered_serial']}
+                </p>
+                """)
+            
+            self.reverse_validation_display.setHtml("".join(html_content))
+            
+        except Exception as e:
+            self.reverse_validation_display.setHtml(f"""
+            <p style='color: red; font-weight: bold;'>❌ Reverse validation error</p>
+            <p><strong>Error:</strong> {str(e)}</p>
+            """)
 
     def toggle_epc_options(self, state):
         """Enable/disable EPC options based on checkbox state."""
@@ -618,8 +805,15 @@ class EPCDatabasePage(QWizardPage):
             upc = encoding_page.upc_number.get_upc_value()
             serial_text = encoding_page.serial_number.text().strip()
             
-            if not upc or not validate_upc(upc):
-                self.show_error("Valid 12-digit UPC required for preview")
+            # Use round-trip validation for UPC
+            if not upc:
+                self.show_error("UPC required for preview")
+                return
+                
+            is_valid, details = validate_upc_with_round_trip(upc)
+            if not is_valid:
+                error_msg = details.get('error', 'Invalid UPC')
+                self.show_error(f"UPC validation failed: {error_msg}")
                 return
             
             if not serial_text or not serial_text.isdigit():
@@ -663,13 +857,20 @@ class EPCDatabasePage(QWizardPage):
             self.show_error("Qty per DB must be a positive number")
             return False
         
-        # Validate UPC and serial from previous page
+        # Validate UPC and serial from previous page with round-trip validation
         wizard = self.wizard()
         encoding_page = wizard.page(wizard.pageIds()[1])
         
         upc = encoding_page.upc_number.get_upc_value()
-        if not validate_upc(upc):
-            self.show_error("Valid 12-digit UPC required for EPC generation")
+        
+        # Use round-trip validation for more robust UPC checking
+        is_valid, details = validate_upc_with_round_trip(upc)
+        if not is_valid:
+            error_msg = details.get('error', 'Invalid UPC')
+            if 'Round-trip validation failed' in error_msg:
+                self.show_error(f"UPC validation failed: {upc} does not convert properly through EPC conversion. Please verify the UPC is correct.")
+            else:
+                self.show_error(f"UPC validation failed: {error_msg}")
             return False
         
         serial_text = encoding_page.serial_number.text().strip()
