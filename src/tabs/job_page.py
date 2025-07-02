@@ -667,15 +667,15 @@ class JobPageWidget(QWidget):
         }
 
         # Use threaded generation to prevent UI freezing
-        progress_dialog = EPCProgressDialog(
+        self.epc_progress_dialog = EPCProgressDialog(
             upc, start_serial, total_qty, qty_per_db, data_folder_path, self
         )
         
         # Connect completion signal
-        progress_dialog.generation_finished.connect(self.on_existing_job_epc_finished)
+        self.epc_progress_dialog.generation_finished.connect(self.on_existing_job_epc_finished)
         
         # Show the dialog
-        progress_dialog.exec()
+        self.epc_progress_dialog.exec()
 
     def on_existing_job_epc_finished(self, success, result):
         """Handle completion of EPC generation for existing job."""
@@ -849,19 +849,19 @@ class JobPageWidget(QWidget):
         save_path = os.path.join(job_path, output_file_name)
 
         # Use threaded PDF generation for better performance
-        progress_dialog = PDFProgressDialog(
+        self.pdf_progress_dialog = PDFProgressDialog(
             template_path, job_data, save_path, self
         )
         
         # Connect completion signal
-        progress_dialog.generation_finished.connect(
+        self.pdf_progress_dialog.generation_finished.connect(
             lambda success, result: self.on_pdf_generation_finished(
                 success, result, save_path
             )
         )
         
         # Show the dialog
-        progress_dialog.exec()
+        self.pdf_progress_dialog.exec()
 
     def on_pdf_generation_finished(self, success, result, expected_path):
         """Handle completion of PDF generation."""
@@ -1048,19 +1048,19 @@ class JobPageWidget(QWidget):
         print(f"Deleting {location_type} folder: {path}")
         
         # Use threaded deletion for potentially large folders
-        progress_dialog = FileOperationProgressDialog(
+        self.file_op_progress_dialog = FileOperationProgressDialog(
             'delete', path, None, None, self
         )
         
         # Connect completion signal
-        progress_dialog.operation_finished.connect(
+        self.file_op_progress_dialog.operation_finished.connect(
             lambda success, message: self.on_delete_operation_finished(
                 success, message, location_type, path
             )
         )
         
         # Show the dialog
-        progress_dialog.exec()
+        self.file_op_progress_dialog.exec()
 
     def on_delete_operation_finished(self, success, message, location_type, path):
         """Handle completion of delete operation and continue with next deletion."""
@@ -1173,19 +1173,19 @@ class JobPageWidget(QWidget):
             data_folder_path = job_data.get("data_folder_path", "")
             
             # Create and show progress dialog
-            progress_dialog = EPCProgressDialog(
+            self.epc_progress_dialog = EPCProgressDialog(
                 upc, start_serial, total_qty, qty_per_db, data_folder_path, self
             )
             
             # Connect completion signal
-            progress_dialog.generation_finished.connect(
+            self.epc_progress_dialog.generation_finished.connect(
                 lambda success, result: self.on_epc_generation_finished(
                     success, result, job_data, job_folder_path
                 )
             )
             
             # Show the dialog
-            progress_dialog.exec()
+            self.epc_progress_dialog.exec()
             
         except Exception as e:
             print(f"EPC generation setup failed: {e}")
@@ -1285,19 +1285,19 @@ class JobPageWidget(QWidget):
                 return
             
             # Use threaded file operation for large copies
-            progress_dialog = FileOperationProgressDialog(
+            self.copy_progress_dialog = FileOperationProgressDialog(
                 'copy', job_folder_path, destination_path, job_data, self
             )
             
             # Connect completion signal
-            progress_dialog.operation_finished.connect(
+            self.copy_progress_dialog.operation_finished.connect(
                 lambda success, message: self.on_copy_operation_finished(
                     success, message, destination_path
                 )
             )
             
             # Show the dialog
-            progress_dialog.exec()
+            self.copy_progress_dialog.exec()
             
         except Exception as e:
             QMessageBox.warning(
@@ -1498,103 +1498,89 @@ class JobPageWidget(QWidget):
         try:
             # Preserve creation date from the original folder name
             old_folder_name = os.path.basename(old_primary_path)
-            date_part = old_folder_name.split(" - ")[0]
-        except IndexError:
-            date_part = datetime.now().strftime("%y-%m-%d")  # Fallback
+            date_match = re.match(r"(\d{2}-\d{2}-\d{2})", old_folder_name)
+            creation_date = date_match.group(1) if date_match else "UnknownDate"
 
-        customer = new_data.get("Customer")
-        label_size = new_data.get("Label Size")
-        po_num = new_data.get("PO#")
-        job_ticket = self.get_job_data_value(new_data, "Ticket#", "Job Ticket#")
-        new_folder_name = f"{date_part} - {po_num} - {job_ticket}"
+            new_po = new_data.get("PO#")
+            new_ticket = self.get_job_data_value(new_data, "Ticket#", "Job Ticket#")
+            new_folder_name = f"{creation_date} - {new_po} - {new_ticket}"
 
-        # Reconstruct the base path (e.g., C:/Users/../Desktop) from the old full path
-        base_primary_path = os.path.dirname(
-            os.path.dirname(os.path.dirname(old_primary_path))
-        )
-        new_primary_path = os.path.join(
-            base_primary_path, customer, label_size, new_folder_name
-        )
+            # New primary path
+            old_base_path = os.path.dirname(os.path.dirname(old_primary_path))
+            new_primary_path = os.path.join(
+                old_base_path, new_data.get("Label Size"), new_folder_name
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Update Error", f"Error determining new job path: {e}")
+            return
 
-        # --- 2. Move the primary folder if its path has changed ---
-        if old_primary_path != new_primary_path:
-            try:
-                print(
-                    f"Path changed. Moving from {old_primary_path} to {new_primary_path}"
-                )
+        # --- 2. Rename the primary job folder ---
+        try:
+            if old_primary_path != new_primary_path and os.path.exists(old_primary_path):
+                # Ensure parent directory exists
                 os.makedirs(os.path.dirname(new_primary_path), exist_ok=True)
                 shutil.move(old_primary_path, new_primary_path)
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "File Error",
-                    f"Could not move job folder: {e}.\nUpdate aborted.",
-                )
-                return
+                print(f"Renamed primary folder: {old_primary_path} -> {new_primary_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Update Error", f"Could not rename primary job folder: {e}")
+            # Attempt to revert if possible
+            if not os.path.exists(old_primary_path) and os.path.exists(new_primary_path):
+                shutil.move(new_primary_path, old_primary_path)
+            return
 
-        # --- 3. Update the job_data.json file inside the new primary folder location ---
+        # --- 3. Update paths in job_data.json ---
         new_data["job_folder_path"] = new_primary_path
+        # Update other paths if they exist
+        if "upc_folder_path" in new_data:
+            new_data["upc_folder_path"] = os.path.join(new_primary_path, os.path.basename(new_data["upc_folder_path"]))
+        if "data_folder_path" in new_data:
+            new_data["data_folder_path"] = os.path.join(new_data["upc_folder_path"], "data")
+        if "print_folder_path" in new_data:
+            new_data["print_folder_path"] = os.path.join(new_data["upc_folder_path"], "print")
+
+        # --- 4. Save updated job_data.json ---
         try:
             with open(os.path.join(new_primary_path, "job_data.json"), "w") as f:
                 json.dump(new_data, f, indent=4)
         except Exception as e:
-            QMessageBox.critical(
-                self,
-                "File Error",
-                f"Could not update job_data.json: {e}.\nUpdate aborted.",
-            )
+            QMessageBox.critical(self, "Update Error", f"Could not save updated job data: {e}")
+            # Revert folder rename
+            shutil.move(new_primary_path, old_primary_path)
             return
 
-        # --- 4. Synchronize change with the active jobs source directory ---
+        # --- 5. Update active jobs source directory ---
         try:
-            # First, remove the old version from the active source directory
-            old_active_source_path = os.path.join(
-                config.ACTIVE_JOBS_SOURCE_DIR,
-                current_data.get("Customer"),
-                current_data.get("Label Size"),
-                old_folder_name,
-            )
-            if os.path.exists(old_active_source_path):
-                shutil.rmtree(old_active_source_path)
+            old_active_source_path = current_data.get("active_source_folder_path")
+            if old_active_source_path and os.path.exists(old_active_source_path):
+                active_base_path = os.path.dirname(os.path.dirname(old_active_source_path))
+                new_active_source_path = os.path.join(
+                    active_base_path, new_data.get("Label Size"), new_folder_name
+                )
 
-            # Then, copy the updated primary folder to the active source directory
-            new_active_source_path = os.path.join(
-                config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, new_folder_name
-            )
-            shutil.copytree(new_primary_path, new_active_source_path)
-            print(f"Successfully synced update to {new_active_source_path}")
+                if old_active_source_path != new_active_source_path:
+                    os.makedirs(os.path.dirname(new_active_source_path), exist_ok=True)
+                    shutil.move(old_active_source_path, new_active_source_path)
+                    print(f"Renamed active source folder: {old_active_source_path} -> {new_active_source_path}")
+
+                # Save updated job data to active source
+                with open(os.path.join(new_active_source_path, "job_data.json"), "w") as f:
+                    json.dump(new_data, f, indent=4)
         except Exception as e:
-            QMessageBox.warning(
-                self,
-                "Sync Error",
-                f"Could not synchronize job update to the active source directory: {e}",
-            )
+            print(f"Warning: Could not update active jobs source folder: {e}")
 
-        # --- 5. Update the in-memory list and the UI table ---
+        # --- 6. Update the UI ---
         self.all_jobs[row_index] = new_data
-        for col, header in enumerate(self.headers):
-            if header in new_data:
-                # Special handling for Due Date formatting
-                if header == "Due Date":
-                    formatted_value = self.format_date_for_display(new_data[header])
-                    item = QStandardItem(formatted_value)
-                # Special handling for Qty formatting
-                elif header == "Qty":
-                    qty_value = new_data[header]
-                    if qty_value and str(qty_value).isdigit():
-                        formatted_value = f"{int(qty_value):,}"
-                    else:
-                        formatted_value = str(qty_value)
-                    item = QStandardItem(formatted_value)
-                else:
-                    item = QStandardItem(str(new_data[header]))
-                self.model.setItem(row_index, col, item)
-
-        # Ensure directories are still being monitored after changes
+        self.update_job_in_table(new_data)
+        
+        QMessageBox.information(self, "Success", "Job updated successfully.")
+        
+        # Refresh monitoring
         self.ensure_directory_monitoring()
 
     def get_job_data_value(self, job_data, new_key, old_key=None):
-        """Get job data value with fallback for backward compatibility."""
-        if old_key:
-            return job_data.get(new_key, job_data.get(old_key, ""))
-        return job_data.get(new_key, "")
+        """Helper to get value from job_data, trying new key first then old key."""
+        if new_key in job_data:
+            return job_data[new_key]
+        if old_key and old_key in job_data:
+            return job_data[old_key]
+        return ""
