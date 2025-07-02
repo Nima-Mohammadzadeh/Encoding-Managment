@@ -787,3 +787,397 @@ class EPCProgressDialog(QProgressDialog):
         if self.worker.isRunning():
             self.worker.terminate()
         self.generation_finished.emit(False, "Generation cancelled by user")
+
+class FileOperationWorker(QThread):
+    """Worker thread for file operations to prevent UI freezing."""
+    
+    progress_updated = Signal(int, str)  # progress percentage, status message
+    operation_complete = Signal(bool, str)  # success, result message
+    operation_failed = Signal(str)  # error message
+    
+    def __init__(self, operation_type, source_path, destination_path=None, job_data=None):
+        super().__init__()
+        self.operation_type = operation_type  # 'copy', 'move', 'delete'
+        self.source_path = source_path
+        self.destination_path = destination_path
+        self.job_data = job_data
+        self.is_cancelled = False
+        
+    def cancel(self):
+        """Cancel the operation."""
+        self.is_cancelled = True
+        
+    def run(self):
+        """Run the file operation in background thread."""
+        try:
+            if self.operation_type == 'copy':
+                self.copy_with_progress()
+            elif self.operation_type == 'move':
+                self.move_with_progress()
+            elif self.operation_type == 'delete':
+                self.delete_with_progress()
+            else:
+                self.operation_failed.emit(f"Unknown operation type: {self.operation_type}")
+                
+        except Exception as e:
+            if not self.is_cancelled:
+                self.operation_failed.emit(str(e))
+    
+    def copy_with_progress(self):
+        """Copy folder with progress updates."""
+        import os
+        import shutil
+        
+        if not os.path.exists(self.source_path):
+            self.operation_failed.emit(f"Source path does not exist: {self.source_path}")
+            return
+            
+        # Count total files for progress calculation
+        total_files = 0
+        for root, dirs, files in os.walk(self.source_path):
+            total_files += len(files)
+            if self.is_cancelled:
+                return
+        
+        if total_files == 0:
+            total_files = 1  # Avoid division by zero
+            
+        self.progress_updated.emit(0, f"Starting copy operation...")
+        
+        copied_files = 0
+        
+        def copy_function(src, dst, *, follow_symlinks=True):
+            nonlocal copied_files
+            if self.is_cancelled:
+                raise InterruptedError("Operation cancelled")
+                
+            result = shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+            copied_files += 1
+            
+            progress = int((copied_files / total_files) * 100)
+            filename = os.path.basename(src)
+            self.progress_updated.emit(progress, f"Copying: {filename} ({copied_files}/{total_files})")
+            
+            return result
+        
+        try:
+            shutil.copytree(self.source_path, self.destination_path, copy_function=copy_function)
+            if not self.is_cancelled:
+                self.operation_complete.emit(True, f"Successfully copied {copied_files} files")
+        except InterruptedError:
+            self.operation_failed.emit("Copy operation cancelled")
+        except Exception as e:
+            self.operation_failed.emit(f"Copy failed: {str(e)}")
+    
+    def move_with_progress(self):
+        """Move folder with progress updates."""
+        import os
+        import shutil
+        
+        self.progress_updated.emit(0, "Starting move operation...")
+        
+        try:
+            # For move operations, we can use a simple progress indicator
+            self.progress_updated.emit(25, "Preparing move...")
+            
+            if self.is_cancelled:
+                return
+                
+            self.progress_updated.emit(50, "Moving folder...")
+            shutil.move(self.source_path, self.destination_path)
+            
+            if not self.is_cancelled:
+                self.progress_updated.emit(100, "Move completed successfully")
+                self.operation_complete.emit(True, f"Successfully moved to {self.destination_path}")
+                
+        except Exception as e:
+            self.operation_failed.emit(f"Move failed: {str(e)}")
+    
+    def delete_with_progress(self):
+        """Delete folder with progress updates."""
+        import os
+        import shutil
+        
+        if not os.path.exists(self.source_path):
+            self.operation_complete.emit(True, "Path already deleted")
+            return
+            
+        # Count files for progress
+        total_items = 0
+        for root, dirs, files in os.walk(self.source_path):
+            total_items += len(files) + len(dirs)
+            if self.is_cancelled:
+                return
+        
+        self.progress_updated.emit(0, f"Deleting {total_items} items...")
+        
+        try:
+            if self.is_cancelled:
+                return
+                
+            self.progress_updated.emit(50, "Removing folder structure...")
+            
+            # Try normal deletion first
+            try:
+                shutil.rmtree(self.source_path)
+                success = True
+            except Exception:
+                # Try forceful deletion on Windows
+                success = False
+                if os.name == "nt":
+                    import subprocess
+                    self.progress_updated.emit(75, "Using forceful deletion...")
+                    
+                    result = subprocess.run(
+                        ["cmd", "/c", "rmdir", "/S", "/Q", self.source_path],
+                        capture_output=True, text=True, shell=False
+                    )
+                    
+                    if not os.path.exists(self.source_path):
+                        success = True
+                
+            if success and not self.is_cancelled:
+                self.progress_updated.emit(100, "Deletion completed")
+                self.operation_complete.emit(True, "Successfully deleted folder")
+            elif not success:
+                self.operation_failed.emit("Could not delete folder completely")
+                
+        except Exception as e:
+            self.operation_failed.emit(f"Delete failed: {str(e)}")
+
+
+class FileOperationProgressDialog(QProgressDialog):
+    """Progress dialog for file operations with cancellation support."""
+    
+    operation_finished = Signal(bool, str)  # success, message
+    
+    def __init__(self, operation_type, source_path, destination_path=None, job_data=None, parent=None):
+        super().__init__(parent)
+        
+        operation_names = {
+            'copy': 'Copying Files',
+            'move': 'Moving Files', 
+            'delete': 'Deleting Files'
+        }
+        
+        self.setWindowTitle(operation_names.get(operation_type, 'File Operation'))
+        self.setLabelText("Preparing operation...")
+        self.setMinimum(0)
+        self.setMaximum(100)
+        self.setValue(0)
+        self.setModal(True)
+        self.setMinimumDuration(500)
+        self.setCancelButtonText("Cancel")
+        
+        # Create worker thread
+        self.worker = FileOperationWorker(operation_type, source_path, destination_path, job_data)
+        
+        # Connect signals
+        self.worker.progress_updated.connect(self.update_progress)
+        self.worker.operation_complete.connect(self.on_operation_complete)
+        self.worker.operation_failed.connect(self.on_operation_failed)
+        self.canceled.connect(self.on_cancelled)
+        
+        # Start operation
+        self.worker.start()
+    
+    def update_progress(self, percentage, message):
+        """Update progress bar and message."""
+        self.setValue(percentage)
+        self.setLabelText(message)
+    
+    def on_operation_complete(self, success, message):
+        """Handle successful completion."""
+        self.setValue(100)
+        self.setLabelText("Operation completed successfully")
+        QTimer.singleShot(1000, lambda: self.operation_finished.emit(True, message))
+        QTimer.singleShot(1500, self.accept)
+    
+    def on_operation_failed(self, error_message):
+        """Handle operation failure."""
+        self.setLabelText(f"Operation failed: {error_message}")
+        QTimer.singleShot(1000, lambda: self.operation_finished.emit(False, error_message))
+        QTimer.singleShot(1500, self.reject)
+    
+    def on_cancelled(self):
+        """Handle user cancellation."""
+        self.setLabelText("Cancelling operation...")
+        self.worker.cancel()
+        self.worker.wait(3000)
+        if self.worker.isRunning():
+            self.worker.terminate()
+        self.operation_finished.emit(False, "Operation cancelled by user")
+
+class PDFGenerationWorker(QThread):
+    """Worker thread for PDF generation to prevent UI freezing."""
+    
+    progress_updated = Signal(int, str)  # progress percentage, status message
+    generation_complete = Signal(str)    # output file path
+    generation_failed = Signal(str)      # error message
+    
+    def __init__(self, template_path, job_data, output_path):
+        super().__init__()
+        self.template_path = template_path
+        self.job_data = job_data
+        self.output_path = output_path
+        self.is_cancelled = False
+        
+    def cancel(self):
+        """Cancel the PDF generation."""
+        self.is_cancelled = True
+        
+    def run(self):
+        """Run PDF generation in background thread."""
+        try:
+            import fitz
+            from datetime import datetime
+            
+            self.progress_updated.emit(0, "Opening PDF template...")
+            
+            if self.is_cancelled:
+                return
+                
+            # Define field mappings
+            fields_to_fill = {
+                "Customer": "customer",
+                "Part#": "part_num",
+                "Ticket#": "job_ticket",
+                "PO#": "customer_po",
+                "Inlay Type": "inlay_type",
+                "Label Size": "label_size",
+                "Qty": "qty",
+                "Item": "item",
+                "UPC Number": "upc",
+                "LPR": "lpr",
+                "Rolls": "rolls",
+                "Start": "start",
+                "End": "end",
+                "Date": "Date",
+            }
+            
+            self.progress_updated.emit(20, "Loading PDF document...")
+            doc = fitz.open(self.template_path)
+            
+            if self.is_cancelled:
+                doc.close()
+                return
+            
+            total_fields = len(fields_to_fill)
+            filled_fields = 0
+            
+            self.progress_updated.emit(40, "Processing form fields...")
+            
+            for page in doc:
+                if self.is_cancelled:
+                    break
+                    
+                for widget in page.widgets():
+                    if self.is_cancelled:
+                        break
+                        
+                    for data_key, pdf_key in fields_to_fill.items():
+                        if widget.field_name == pdf_key:
+                            value = ""
+                            if data_key == "Date":
+                                value = datetime.now().strftime("%m/%d/%Y")
+                            elif data_key == "Ticket#":
+                                value = self.job_data.get("Job Ticket#", self.job_data.get("Ticket#", ""))
+                            elif data_key == "Qty":
+                                qty_value = self.job_data.get("Quantity", self.job_data.get("Qty", ""))
+                                # Format quantity with commas for display in PDF
+                                if qty_value and str(qty_value).replace(',', '').isdigit():
+                                    clean_qty = str(qty_value).replace(',', '')
+                                    value = f"{int(clean_qty):,}"
+                                else:
+                                    value = str(qty_value) if qty_value else ""
+                            elif data_key == "UPC Number":
+                                upc_value = self.job_data.get(data_key, "")
+                                # Format UPC with spaces for display in PDF
+                                if (
+                                    upc_value
+                                    and len(upc_value) == 12
+                                    and upc_value.isdigit()
+                                ):
+                                    value = f"{upc_value[:3]} {upc_value[3:6]} {upc_value[6:9]} {upc_value[9:12]}"
+                                else:
+                                    value = upc_value
+                            else:
+                                value = self.job_data.get(data_key, "")
+
+                            widget.field_value = str(value)
+                            widget.update()
+                            
+                            filled_fields += 1
+                            progress = 40 + int((filled_fields / total_fields) * 40)
+                            self.progress_updated.emit(progress, f"Filled field: {data_key}")
+                            break
+            
+            if not self.is_cancelled:
+                self.progress_updated.emit(90, "Saving PDF document...")
+                doc.save(self.output_path, garbage=4, deflate=True)
+                doc.close()
+                
+                self.progress_updated.emit(100, "PDF generation completed")
+                self.generation_complete.emit(self.output_path)
+            else:
+                doc.close()
+                
+        except Exception as e:
+            self.generation_failed.emit(str(e))
+
+
+class PDFProgressDialog(QProgressDialog):
+    """Progress dialog for PDF generation with cancellation support."""
+    
+    generation_finished = Signal(bool, str)  # success, result (file path or error message)
+    
+    def __init__(self, template_path, job_data, output_path, parent=None):
+        super().__init__(parent)
+        
+        self.setWindowTitle("Generating PDF Checklist")
+        self.setLabelText("Preparing PDF generation...")
+        self.setMinimum(0)
+        self.setMaximum(100)
+        self.setValue(0)
+        self.setModal(True)
+        self.setMinimumDuration(500)
+        self.setCancelButtonText("Cancel")
+        
+        # Create worker thread
+        self.worker = PDFGenerationWorker(template_path, job_data, output_path)
+        
+        # Connect signals
+        self.worker.progress_updated.connect(self.update_progress)
+        self.worker.generation_complete.connect(self.on_generation_complete)
+        self.worker.generation_failed.connect(self.on_generation_failed)
+        self.canceled.connect(self.on_cancelled)
+        
+        # Start generation
+        self.worker.start()
+    
+    def update_progress(self, percentage, message):
+        """Update progress bar and message."""
+        self.setValue(percentage)
+        self.setLabelText(message)
+    
+    def on_generation_complete(self, output_path):
+        """Handle successful completion."""
+        self.setValue(100)
+        self.setLabelText("PDF generation completed successfully")
+        QTimer.singleShot(1000, lambda: self.generation_finished.emit(True, output_path))
+        QTimer.singleShot(1500, self.accept)
+    
+    def on_generation_failed(self, error_message):
+        """Handle generation failure."""
+        self.setLabelText(f"PDF generation failed: {error_message}")
+        QTimer.singleShot(1000, lambda: self.generation_finished.emit(False, error_message))
+        QTimer.singleShot(1500, self.reject)
+    
+    def on_cancelled(self):
+        """Handle user cancellation."""
+        self.setLabelText("Cancelling PDF generation...")
+        self.worker.cancel()
+        self.worker.wait(3000)
+        if self.worker.isRunning():
+            self.worker.terminate()
+        self.generation_finished.emit(False, "PDF generation cancelled by user")

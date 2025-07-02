@@ -28,7 +28,7 @@ import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer
 from src.wizards.new_job_wizard import NewJobWizard
-from src.widgets.job_details_dialog import JobDetailsDialog, EPCProgressDialog
+from src.widgets.job_details_dialog import JobDetailsDialog, EPCProgressDialog, FileOperationProgressDialog, PDFProgressDialog
 import src.config as config
 from src.utils.epc_conversion import (
     create_upc_folder_structure,
@@ -831,7 +831,7 @@ class JobPageWidget(QWidget):
 
     def create_checklist_pdf(self, job_data, job_path):
         """
-        Generates a checklist for the job and saves it in the specified job_path.
+        Generates a checklist for the job and saves it in the specified job_path using threaded generation.
         """
         template_path = os.path.join(
             self.base_path, "data", "Encoding Checklist V4.1.pdf"
@@ -845,74 +845,34 @@ class JobPageWidget(QWidget):
             )
             return
 
-        fields_to_fill = {
-            "Customer": "customer",
-            "Part#": "part_num",
-            "Ticket#": "job_ticket",
-            "PO#": "customer_po",
-            "Inlay Type": "inlay_type",
-            "Label Size": "label_size",
-            "Qty": "qty",
-            "Item": "item",
-            "UPC Number": "upc",
-            "LPR": "lpr",
-            "Rolls": "rolls",
-            "Start": "start",
-            "End": "end",
-            "Date": "Date",
-        }
-
         output_file_name = f"{job_data.get('Customer', '')}-{self.get_job_data_value(job_data, 'Ticket#', 'Job Ticket#')}-{job_data.get('PO#', '')}-Checklist.pdf"
         save_path = os.path.join(job_path, output_file_name)
 
-        try:
-            doc = fitz.open(template_path)
-            for page in doc:
-                for widget in page.widgets():
-                    for data_key, pdf_key in fields_to_fill.items():
-                        if widget.field_name == pdf_key:
-                            value = ""
-                            if data_key == "Date":
-                                value = datetime.now().strftime("%m/%d/%Y")
-                            elif data_key == "Ticket#":
-                                value = self.get_job_data_value(
-                                    job_data, "Ticket#", "Job Ticket#"
-                                )
-                            elif data_key == "Qty":
-                                qty_value = self.get_job_data_value(
-                                    job_data, "Qty", "Quantity"
-                                )
-                                # Format quantity with commas for display in PDF
-                                if qty_value and qty_value.isdigit():
-                                    value = f"{int(qty_value):,}"
-                                else:
-                                    value = qty_value
-                            elif data_key == "UPC Number":
-                                upc_value = job_data.get(data_key, "")
-                                # Format UPC with spaces for display in PDF
-                                if (
-                                    upc_value
-                                    and len(upc_value) == 12
-                                    and upc_value.isdigit()
-                                ):
-                                    value = f"{upc_value[:3]} {upc_value[3:6]} {upc_value[6:9]} {upc_value[9:12]}"
-                                else:
-                                    value = upc_value
-                            else:
-                                value = job_data.get(data_key, "")
-
-                            widget.field_value = str(value)
-                            widget.update()
-                            break
-
-            doc.save(save_path, garbage=4, deflate=True)
-            doc.close()
-            print(f"Checklist created successfully at:\n{save_path}")
-        except Exception as e:
-            print(f"Error processing PDF: {e}")
-            QMessageBox.critical(
-                self, "PDF Error", f"Could not generate checklist PDF:\n{e}"
+        # Use threaded PDF generation for better performance
+        progress_dialog = PDFProgressDialog(
+            template_path, job_data, save_path, self
+        )
+        
+        # Connect completion signal
+        progress_dialog.generation_finished.connect(
+            lambda success, result: self.on_pdf_generation_finished(
+                success, result, save_path
             )
+        )
+        
+        # Show the dialog
+        progress_dialog.exec()
+
+    def on_pdf_generation_finished(self, success, result, expected_path):
+        """Handle completion of PDF generation."""
+        if success:
+            print(f"Checklist created successfully at:\n{result}")
+        else:
+            if "cancelled" not in result.lower():
+                QMessageBox.critical(
+                    self, "PDF Error", f"Could not generate checklist PDF:\n{result}"
+                )
+            print(f"PDF generation failed: {result}")
 
     def open_job_details(self, index):
         """Open job details window when job is double-clicked"""
@@ -999,7 +959,7 @@ class JobPageWidget(QWidget):
                 self.ensure_directory_monitoring()
 
     def _delete_job_files(self, job_data):
-        """Deletes job folders from primary and active source locations."""
+        """Deletes job folders from primary and active source locations using threaded operations."""
         # First, remove all paths related to this job from the file watcher
         primary_path = job_data.get("job_folder_path")
 
@@ -1038,48 +998,16 @@ class JobPageWidget(QWidget):
 
             # Give the system a moment to release file handles
             import time
-
             time.sleep(0.1)
 
-        # 1. Delete from primary location
+        # Store paths for deletion
+        paths_to_delete = []
+        
+        # 1. Primary location
         if primary_path and os.path.exists(primary_path):
-            try:
-                # Try to delete normally first
-                shutil.rmtree(primary_path)
-                print(f"Deleted primary folder: {primary_path}")
-            except Exception as e:
-                # If that fails, try a more forceful approach on Windows
-                if os.name == "nt":  # Windows
-                    try:
-                        import subprocess
+            paths_to_delete.append(('primary', primary_path))
 
-                        # Use Windows rmdir command with /S /Q flags (remove directory tree quietly)
-                        subprocess.run(
-                            ["cmd", "/c", "rmdir", "/S", "/Q", primary_path],
-                            capture_output=True,
-                            text=True,
-                            shell=False,
-                        )
-                        if not os.path.exists(primary_path):
-                            print(f"Forcefully deleted primary folder: {primary_path}")
-                        else:
-                            raise Exception(
-                                "Folder still exists after forced deletion attempt"
-                            )
-                    except Exception as e2:
-                        QMessageBox.warning(
-                            self,
-                            "Delete Error",
-                            f"Could not delete primary job folder.\n{e}\n\nForced deletion also failed: {e2}",
-                        )
-                else:
-                    QMessageBox.warning(
-                        self,
-                        "Delete Error",
-                        f"Could not delete primary job folder.\n{e}",
-                    )
-
-        # 2. Delete from active jobs source
+        # 2. Active jobs source location
         try:
             if primary_path:
                 old_folder_name = os.path.basename(primary_path)
@@ -1090,52 +1018,60 @@ class JobPageWidget(QWidget):
                     old_folder_name,
                 )
                 if os.path.exists(active_source_path):
-                    try:
-                        shutil.rmtree(active_source_path)
-                        print(f"Deleted active source folder: {active_source_path}")
-                    except Exception as e:
-                        # Try forceful deletion on Windows
-                        if os.name == "nt":
-                            try:
-                                import subprocess
-
-                                subprocess.run(
-                                    [
-                                        "cmd",
-                                        "/c",
-                                        "rmdir",
-                                        "/S",
-                                        "/Q",
-                                        active_source_path,
-                                    ],
-                                    capture_output=True,
-                                    text=True,
-                                    shell=False,
-                                )
-                                if not os.path.exists(active_source_path):
-                                    print(
-                                        f"Forcefully deleted active source folder: {active_source_path}"
-                                    )
-                                else:
-                                    raise Exception(
-                                        "Folder still exists after forced deletion attempt"
-                                    )
-                            except Exception as e2:
-                                QMessageBox.warning(
-                                    self,
-                                    "Delete Error",
-                                    f"Could not delete active source job folder.\n{e}\n\nForced deletion also failed: {e2}",
-                                )
-                        else:
-                            QMessageBox.warning(
-                                self,
-                                "Delete Error",
-                                f"Could not delete active source job folder.\n{e}",
-                            )
+                    paths_to_delete.append(('active_source', active_source_path))
         except Exception as e:
-            QMessageBox.warning(
-                self, "Delete Error", f"Could not delete active source job folder.\n{e}"
+            print(f"Error checking active source path: {e}")
+
+        # Delete paths using threaded operations
+        if paths_to_delete:
+            self.delete_paths_with_progress(paths_to_delete)
+        else:
+            print("No paths found to delete")
+
+    def delete_paths_with_progress(self, paths_to_delete):
+        """Delete multiple paths sequentially with progress feedback."""
+        if not paths_to_delete:
+            return
+            
+        # Store remaining paths for sequential deletion
+        self.pending_deletions = paths_to_delete.copy()
+        self.delete_next_path()
+
+    def delete_next_path(self):
+        """Delete the next path in the queue."""
+        if not hasattr(self, 'pending_deletions') or not self.pending_deletions:
+            print("All deletions completed")
+            return
+            
+        location_type, path = self.pending_deletions.pop(0)
+        
+        print(f"Deleting {location_type} folder: {path}")
+        
+        # Use threaded deletion for potentially large folders
+        progress_dialog = FileOperationProgressDialog(
+            'delete', path, None, None, self
+        )
+        
+        # Connect completion signal
+        progress_dialog.operation_finished.connect(
+            lambda success, message: self.on_delete_operation_finished(
+                success, message, location_type, path
             )
+        )
+        
+        # Show the dialog
+        progress_dialog.exec()
+
+    def on_delete_operation_finished(self, success, message, location_type, path):
+        """Handle completion of delete operation and continue with next deletion."""
+        if success:
+            print(f"Successfully deleted {location_type} folder: {path}")
+        else:
+            print(f"Failed to delete {location_type} folder: {message}")
+            # Continue with remaining deletions even if one fails
+            
+        # Continue with next deletion
+        self.delete_next_path()
 
     def create_job_folder_and_checklist(self, job_data):
         """Enhanced job creation with EPC functionality and improved folder structure."""
@@ -1305,7 +1241,7 @@ class JobPageWidget(QWidget):
                     self, "Save Error", f"Could not save job_data.json.\n{e}"
                 )
 
-            # Create checklist PDF in the job folder
+            # Create checklist PDF
             self.create_checklist_pdf(job_data, job_folder_path)
 
             # Copy to active jobs source directory
@@ -1325,7 +1261,7 @@ class JobPageWidget(QWidget):
             return False
 
     def copy_to_active_jobs_source(self, job_data, job_folder_path):
-        """Copy job folder to active jobs source directory."""
+        """Copy job folder to active jobs source directory using threaded operation."""
         try:
             customer = job_data.get("Customer")
             label_size = job_data.get("Label Size")
@@ -1336,23 +1272,49 @@ class JobPageWidget(QWidget):
             os.makedirs(source_dest_path, exist_ok=True)
 
             destination_path = os.path.join(source_dest_path, final_folder_name)
-            shutil.copytree(job_folder_path, destination_path)
-            print(f"Successfully copied job folder to: {destination_path}")
-        except FileExistsError:
-            print(
-                f"Folder already exists in active source, skipping copy: {destination_path}"
+            
+            # Check if destination already exists
+            if os.path.exists(destination_path):
+                print(f"Folder already exists in active source, skipping copy: {destination_path}")
+                QMessageBox.warning(
+                    self,
+                    "Duplicate Warning",
+                    f"A folder with the same name already exists in the active source directory. "
+                    f"The job was created in the primary location, but not copied.",
+                )
+                return
+            
+            # Use threaded file operation for large copies
+            progress_dialog = FileOperationProgressDialog(
+                'copy', job_folder_path, destination_path, job_data, self
             )
-            QMessageBox.warning(
-                self,
-                "Duplicate Warning",
-                f"A folder with the same name already exists in the active source directory. "
-                f"The job was created in the primary location, but not copied.",
+            
+            # Connect completion signal
+            progress_dialog.operation_finished.connect(
+                lambda success, message: self.on_copy_operation_finished(
+                    success, message, destination_path
+                )
             )
+            
+            # Show the dialog
+            progress_dialog.exec()
+            
         except Exception as e:
             QMessageBox.warning(
                 self,
                 "Copy Error",
                 f"Could not copy job folder to active source directory.\n\nError: {e}",
+            )
+
+    def on_copy_operation_finished(self, success, message, destination_path):
+        """Handle completion of copy operation."""
+        if success:
+            print(f"Successfully copied job folder to: {destination_path}")
+        else:
+            QMessageBox.warning(
+                self,
+                "Copy Error", 
+                f"Copy operation failed:\n{message}"
             )
 
     def show_job_creation_success(self, job_data, job_folder_path):

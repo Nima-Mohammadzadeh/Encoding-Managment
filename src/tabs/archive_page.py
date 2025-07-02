@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QTreeView
 )
 
-from src.widgets.job_details_dialog import JobDetailsDialog
+from src.widgets.job_details_dialog import JobDetailsDialog, FileOperationProgressDialog
 import src.config as config
 
 from PySide6.QtGui import QStandardItem, QStandardItemModel
@@ -122,26 +122,62 @@ class ArchivePageWidget(QWidget):
         destination_folder_name = os.path.basename(job_folder_path)
         destination_path = os.path.join(self.archive_dir, destination_folder_name)
 
-        try:
-            # Move the entire job folder
-            shutil.move(job_folder_path, destination_path)
-            
-            # Update the job's folder path to its new location BEFORE saving/appending
-            job_data['job_folder_path'] = destination_path
-            
-            # Save the job metadata inside the newly moved folder
-            job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            metadata_path = os.path.join(destination_path, 'job_data.json')
-            with open(metadata_path, 'w') as f:
-                json.dump(job_data, f, indent=4)
-            
-            # Add to the view
-            self.all_jobs.append(job_data)
-            self.update_archive_display()
-            QMessageBox.information(self, "Success", f"Job moved to archive:\n{destination_path}")
+        # Check if destination already exists
+        if os.path.exists(destination_path):
+            QMessageBox.warning(
+                self, 
+                "Archive Error", 
+                f"A job with the same name already exists in the archive: {destination_folder_name}"
+            )
+            return
 
-        except Exception as e:
-            QMessageBox.critical(self, "Archive Error", f"Could not move job to archive.\nError: {e}")
+        # Store job data for later use in callback
+        self.temp_archive_job_data = job_data.copy()
+        self.temp_archive_destination = destination_path
+
+        # Use threaded file operation for potentially large moves
+        progress_dialog = FileOperationProgressDialog(
+            'move', job_folder_path, destination_path, job_data, self
+        )
+        
+        # Connect completion signal
+        progress_dialog.operation_finished.connect(self.on_archive_operation_finished)
+        
+        # Show the dialog
+        progress_dialog.exec()
+
+    def on_archive_operation_finished(self, success, message):
+        """Handle completion of archive operation."""
+        if not hasattr(self, 'temp_archive_job_data'):
+            return
+            
+        job_data = self.temp_archive_job_data
+        destination_path = self.temp_archive_destination
+        
+        # Clean up temporary data
+        delattr(self, 'temp_archive_job_data')
+        delattr(self, 'temp_archive_destination')
+        
+        if success:
+            try:
+                # Update the job's folder path to its new location
+                job_data['job_folder_path'] = destination_path
+                
+                # Save the job metadata inside the newly moved folder
+                job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                metadata_path = os.path.join(destination_path, 'job_data.json')
+                with open(metadata_path, 'w') as f:
+                    json.dump(job_data, f, indent=4)
+                
+                # Add to the view
+                self.all_jobs.append(job_data)
+                self.update_archive_display()
+                QMessageBox.information(self, "Success", f"Job moved to archive:\n{destination_path}")
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Archive Error", f"Job moved but could not update metadata:\n{e}")
+        else:
+            QMessageBox.critical(self, "Archive Error", f"Could not move job to archive:\n{message}")
 
     def get_job_data(self, row_index):
         job_data = {}
@@ -163,30 +199,60 @@ class ArchivePageWidget(QWidget):
         selection_model = self.jobs_table.selectionModel()
         if not selection_model.hasSelection():
             return
-        reply = QMessageBox.question(self, "Confirmation", "Are you sure you want to delete this job?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        reply = QMessageBox.question(
+            self, "Confirmation", "Are you sure you want to delete this job?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
         if reply == QMessageBox.StandardButton.Yes:
             selected_row_index = selection_model.selectedRows()[0]
-            # Find the corresponding job in self.all_jobs and remove it
             job_to_remove = self._get_job_data_for_row(selected_row_index.row())
             
-            # New logic: find the job folder and delete it
             job_folder_path = job_to_remove.get('job_folder_path')
             if job_folder_path and os.path.exists(job_folder_path):
-                reply = QMessageBox.question(self, "Delete Folder", 
-                                           f"This will permanently delete the folder and all its contents:\n{job_folder_path}\n\nAre you sure?",
-                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                reply = QMessageBox.question(
+                    self, "Delete Folder", 
+                    f"This will permanently delete the folder and all its contents:\n{job_folder_path}\n\nAre you sure?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
                 if reply == QMessageBox.StandardButton.Yes:
-                    try:
-                        shutil.rmtree(job_folder_path)
-                        # Remove from the list and table
-                        self.all_jobs = [j for j in self.all_jobs if j.get('job_folder_path') != job_folder_path]
-                        self.model.removeRow(selected_row_index.row())
-                        QMessageBox.information(self, "Deleted", "Job folder has been deleted.")
-                    except Exception as e:
-                        QMessageBox.critical(self, "Delete Error", f"Could not delete folder.\nError: {e}")
+                    # Store data for callback
+                    self.temp_delete_job_data = job_to_remove
+                    self.temp_delete_row_index = selected_row_index.row()
+                    
+                    # Use threaded deletion for potentially large folders
+                    progress_dialog = FileOperationProgressDialog(
+                        'delete', job_folder_path, None, job_to_remove, self
+                    )
+                    
+                    # Connect completion signal
+                    progress_dialog.operation_finished.connect(self.on_delete_operation_finished)
+                    
+                    # Show the dialog
+                    progress_dialog.exec()
             else:
                 QMessageBox.warning(self, "Delete Error", "Could not find job folder to delete.")
+
+    def on_delete_operation_finished(self, success, message):
+        """Handle completion of delete operation."""
+        if not hasattr(self, 'temp_delete_job_data'):
+            return
+            
+        job_to_remove = self.temp_delete_job_data
+        row_index = self.temp_delete_row_index
+        
+        # Clean up temporary data
+        delattr(self, 'temp_delete_job_data')
+        delattr(self, 'temp_delete_row_index')
+        
+        if success:
+            # Remove from the list and table
+            job_folder_path = job_to_remove.get('job_folder_path')
+            self.all_jobs = [j for j in self.all_jobs if j.get('job_folder_path') != job_folder_path]
+            self.model.removeRow(row_index)
+            QMessageBox.information(self, "Deleted", "Job folder has been deleted.")
+        else:
+            QMessageBox.critical(self, "Delete Error", f"Could not delete folder:\n{message}")
 
     def add_job_to_table(self, job_data, status="Archived"):
         row_items = [
