@@ -7,9 +7,9 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QTextEdit, QComboBox, QListWidget,
-    QTabWidget, QWidget, QMessageBox, QGridLayout, QLineEdit
+    QTabWidget, QWidget, QMessageBox, QGridLayout, QLineEdit, QProgressDialog
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QThread, QTimer
 from PySide6.QtGui import QFont, QIcon
 import fitz
 import shutil
@@ -678,3 +678,112 @@ class JobDetailsDialog(QDialog):
             }
             QPushButton#saveButton:hover { background-color: #218838; }
         """
+
+class EPCGenerationWorker(QThread):
+    """Worker thread for EPC database generation to prevent UI freezing."""
+    
+    progress_updated = Signal(int, str)  # progress percentage, status message
+    generation_complete = Signal(list)   # list of created files
+    generation_failed = Signal(str)      # error message
+    
+    def __init__(self, upc, start_serial, total_qty, qty_per_db, save_location):
+        super().__init__()
+        self.upc = upc
+        self.start_serial = start_serial
+        self.total_qty = total_qty
+        self.qty_per_db = qty_per_db
+        self.save_location = save_location
+        self.is_cancelled = False
+        
+    def cancel(self):
+        """Cancel the generation process."""
+        self.is_cancelled = True
+        
+    def run(self):
+        """Run the EPC generation in background thread."""
+        try:
+            from src.utils.epc_conversion import generate_epc_database_files_with_progress
+            
+            # Use the new progress-aware function
+            created_files = generate_epc_database_files_with_progress(
+                self.upc, 
+                self.start_serial, 
+                self.total_qty, 
+                self.qty_per_db, 
+                self.save_location,
+                progress_callback=self.emit_progress,
+                cancel_check=self.check_cancelled
+            )
+            
+            if not self.is_cancelled:
+                self.generation_complete.emit(created_files)
+                
+        except Exception as e:
+            if not self.is_cancelled:
+                self.generation_failed.emit(str(e))
+    
+    def emit_progress(self, percentage, message):
+        """Emit progress update signal."""
+        if not self.is_cancelled:
+            self.progress_updated.emit(percentage, message)
+    
+    def check_cancelled(self):
+        """Check if generation should be cancelled."""
+        return self.is_cancelled
+
+
+class EPCProgressDialog(QProgressDialog):
+    """Progress dialog for EPC generation with cancellation support."""
+    
+    generation_finished = Signal(bool, object)  # success, result (files list or error message)
+    
+    def __init__(self, upc, start_serial, total_qty, qty_per_db, save_location, parent=None):
+        super().__init__(parent)
+        
+        self.setWindowTitle("Generating EPC Database")
+        self.setLabelText("Preparing EPC generation...")
+        self.setMinimum(0)
+        self.setMaximum(100)
+        self.setValue(0)
+        self.setModal(True)
+        self.setMinimumDuration(500)  # Show after 500ms
+        self.setCancelButtonText("Cancel")
+        
+        # Create worker thread
+        self.worker = EPCGenerationWorker(upc, start_serial, total_qty, qty_per_db, save_location)
+        
+        # Connect signals
+        self.worker.progress_updated.connect(self.update_progress)
+        self.worker.generation_complete.connect(self.on_generation_complete)
+        self.worker.generation_failed.connect(self.on_generation_failed)
+        self.canceled.connect(self.on_cancelled)
+        
+        # Start generation
+        self.worker.start()
+    
+    def update_progress(self, percentage, message):
+        """Update progress bar and message."""
+        self.setValue(percentage)
+        self.setLabelText(message)
+    
+    def on_generation_complete(self, created_files):
+        """Handle successful completion."""
+        self.setValue(100)
+        self.setLabelText(f"Complete! Generated {len(created_files)} database files.")
+        QTimer.singleShot(1000, lambda: self.generation_finished.emit(True, created_files))
+        QTimer.singleShot(1500, self.accept)
+    
+    def on_generation_failed(self, error_message):
+        """Handle generation failure."""
+        self.setLabelText(f"Generation failed: {error_message}")
+        QTimer.singleShot(1000, lambda: self.generation_finished.emit(False, error_message))
+        QTimer.singleShot(1500, self.reject)
+    
+    def on_cancelled(self):
+        """Handle user cancellation."""
+        self.setLabelText("Cancelling generation...")
+        self.worker.cancel()
+        self.worker.wait(3000)  # Wait up to 3 seconds for clean shutdown
+        if self.worker.isRunning():
+            self.worker.terminate()
+        self.generation_finished.emit(False, "Generation cancelled by user")

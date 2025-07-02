@@ -412,4 +412,186 @@ def populate_label_sizes_for_customer(template_base_path, customer):
         if os.path.isdir(item_path):
             label_sizes.append(item)
     
-    return sorted(label_sizes) 
+    return sorted(label_sizes)
+
+
+def generate_epc_database_files_with_progress(upc, start_serial, total_qty, qty_per_db, save_location, 
+                                            progress_callback=None, cancel_check=None):
+    """
+    Generate EPC database files with progress reporting and cancellation support.
+    
+    Args:
+        upc (str): 12-digit UPC
+        start_serial (int): Starting serial number
+        total_qty (int): Total quantity to generate
+        qty_per_db (int): Quantity per database file
+        save_location (str): Directory to save files
+        progress_callback (callable): Function to call with (percentage, message) for progress updates
+        cancel_check (callable): Function that returns True if generation should be cancelled
+        
+    Returns:
+        list: List of created file paths
+    """
+    if not validate_upc(upc):
+        raise ValueError("Invalid UPC format")
+    
+    if cancel_check and cancel_check():
+        return []
+    
+    end_serial = start_serial + total_qty - 1
+    num_serials = end_serial - start_serial + 1
+    num_dbs = math.ceil(num_serials / qty_per_db)
+    
+    created_files = []
+    
+    # Pre-calculate common binary values to optimize performance
+    gs1_company_prefix = "0" + upc[:6]
+    item_reference_number = upc[6:11]
+    header = "00110000"
+    filter_value = "001"
+    partition = "101"
+    gs1_binary = dec_to_bin(gs1_company_prefix, 24)
+    item_reference_binary = dec_to_bin(item_reference_number, 20)
+    
+    # Constants for EPC generation
+    epc_prefix = header + filter_value + partition + gs1_binary + item_reference_binary
+    
+    if progress_callback:
+        progress_callback(0, f"Starting generation of {num_dbs} database files...")
+    
+    for db_index in range(num_dbs):
+        if cancel_check and cancel_check():
+            if progress_callback:
+                progress_callback(0, "Generation cancelled")
+            break
+            
+        chunk_start = start_serial + db_index * qty_per_db
+        chunk_end = min(chunk_start + qty_per_db - 1, end_serial)
+        chunk_size = chunk_end - chunk_start + 1
+        
+        if progress_callback:
+            overall_progress = int((db_index / num_dbs) * 100)
+            progress_callback(overall_progress, f"Generating database {db_index + 1} of {num_dbs} ({chunk_size:,} records)...")
+        
+        # Generate EPCs in batches for better performance
+        chunk_serial_numbers = list(range(chunk_start, chunk_end + 1))
+        epc_values = generate_epc_batch_optimized(epc_prefix, chunk_serial_numbers, 
+                                                progress_callback, cancel_check, 
+                                                db_index, num_dbs)
+        
+        if cancel_check and cancel_check():
+            break
+        
+        # Create DataFrame
+        df = pd.DataFrame({
+            'UPC': [upc] * len(chunk_serial_numbers),
+            'Serial #': chunk_serial_numbers,
+            'EPC': epc_values
+        })
+
+        # Generate filename
+        start_range = (chunk_start // 1000) + 1 if chunk_start % 1000 == 0 else (chunk_start // 1000)
+        end_range = ((chunk_end + 1) // 1000)
+        file_name = f"{upc}.DB{db_index + 1}.{start_range}K-{end_range}K.xlsx"
+        file_path = os.path.join(save_location, file_name)
+        
+        if progress_callback:
+            save_progress = int(((db_index + 0.8) / num_dbs) * 100)
+            progress_callback(save_progress, f"Saving database {db_index + 1}: {file_name}")
+        
+        # Save Excel file with optimizations
+        try:
+            with pd.ExcelWriter(file_path, engine='openpyxl', options={'write_only': True}) as writer:
+                df.to_excel(writer, index=False, sheet_name='Sheet1')
+                # Note: write_only mode doesn't support column width adjustment for performance
+        except Exception as e:
+            # Fallback to standard mode if write_only fails
+            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Sheet1')
+                worksheet = writer.sheets['Sheet1']
+                worksheet.column_dimensions['C'].width = 40
+
+        created_files.append(file_path)
+        
+        if progress_callback:
+            completion_progress = int(((db_index + 1) / num_dbs) * 100)
+            progress_callback(completion_progress, f"Completed database {db_index + 1} of {num_dbs}")
+    
+    if progress_callback and not (cancel_check and cancel_check()):
+        progress_callback(100, f"Generation complete! Created {len(created_files)} database files.")
+    
+    return created_files
+
+
+def generate_epc_batch_optimized(epc_prefix, serial_numbers, progress_callback=None, 
+                               cancel_check=None, db_index=0, total_dbs=1):
+    """
+    Generate EPC values in batch with optimizations for better performance.
+    
+    Args:
+        epc_prefix (str): Pre-calculated EPC binary prefix
+        serial_numbers (list): List of serial numbers to process
+        progress_callback (callable): Progress callback function
+        cancel_check (callable): Cancellation check function
+        db_index (int): Current database index for progress reporting
+        total_dbs (int): Total number of databases for progress reporting
+        
+    Returns:
+        list: List of EPC hex values
+    """
+    epc_values = []
+    batch_size = 1000  # Process in smaller batches for progress updates
+    total_serials = len(serial_numbers)
+    
+    for i in range(0, total_serials, batch_size):
+        if cancel_check and cancel_check():
+            break
+            
+        batch_end = min(i + batch_size, total_serials)
+        batch = serial_numbers[i:batch_end]
+        
+        # Generate EPCs for this batch
+        for serial in batch:
+            if cancel_check and cancel_check():
+                break
+            serial_binary = dec_to_bin(serial, 38)
+            epc_binary = epc_prefix + serial_binary
+            epc_hex = bin_to_hex(epc_binary)
+            epc_values.append(epc_hex)
+        
+        # Update progress within the current database
+        if progress_callback and total_serials > batch_size:
+            batch_progress = int((batch_end / total_serials) * 100)
+            sub_progress = int(((db_index + (batch_progress / 100)) / total_dbs) * 100)
+            progress_callback(sub_progress, 
+                            f"Processing database {db_index + 1}: {batch_end:,}/{total_serials:,} records")
+    
+    return epc_values
+
+
+def generate_epc_optimized(upc, serial_number):
+    """
+    Optimized version of generate_epc with pre-calculated values.
+    For use when you need to generate many EPCs with the same UPC.
+    
+    Args:
+        upc (str): 12-digit UPC code
+        serial_number (int): Serial number
+        
+    Returns:
+        str: EPC hex value
+    """
+    # Pre-calculate parts that don't change for the same UPC
+    gs1_company_prefix = "0" + upc[:6]
+    item_reference_number = upc[6:11]
+    header = "00110000"
+    filter_value = "001"
+    partition = "101"
+    gs1_binary = dec_to_bin(gs1_company_prefix, 24)
+    item_reference_binary = dec_to_bin(item_reference_number, 20)
+    
+    # Only calculate the changing part
+    serial_binary = dec_to_bin(serial_number, 38)
+    epc_binary = header + filter_value + partition + gs1_binary + item_reference_binary + serial_binary
+    epc_hex = bin_to_hex(epc_binary)
+    return epc_hex 

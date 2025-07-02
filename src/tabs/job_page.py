@@ -28,11 +28,12 @@ import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer
 from src.wizards.new_job_wizard import NewJobWizard
-from src.widgets.job_details_dialog import JobDetailsDialog
+from src.widgets.job_details_dialog import JobDetailsDialog, EPCProgressDialog
 import src.config as config
 from src.utils.epc_conversion import (
     create_upc_folder_structure,
     generate_epc_database_files,
+    generate_epc_database_files_with_progress,
     validate_upc,
     calculate_total_quantity_with_percentages,
 )
@@ -656,12 +657,45 @@ class JobPageWidget(QWidget):
             data_folder_path = os.path.join(job_folder_path, "data")
             os.makedirs(data_folder_path, exist_ok=True)
 
-        try:
-            # Generate EPC database files
-            created_files = generate_epc_database_files(
-                upc, start_serial, total_qty, qty_per_db, data_folder_path
-            )
+        # Store parameters for later use in callback
+        self.temp_epc_params = {
+            'job_data': job_data,
+            'job_folder_path': job_folder_path,
+            'data_folder_path': data_folder_path,
+            'selected_row': selected_row_index.row(),
+            'total_qty': total_qty
+        }
 
+        # Use threaded generation to prevent UI freezing
+        progress_dialog = EPCProgressDialog(
+            upc, start_serial, total_qty, qty_per_db, data_folder_path, self
+        )
+        
+        # Connect completion signal
+        progress_dialog.generation_finished.connect(self.on_existing_job_epc_finished)
+        
+        # Show the dialog
+        progress_dialog.exec()
+
+    def on_existing_job_epc_finished(self, success, result):
+        """Handle completion of EPC generation for existing job."""
+        if not hasattr(self, 'temp_epc_params'):
+            return
+            
+        params = self.temp_epc_params
+        job_data = params['job_data']
+        job_folder_path = params['job_folder_path']
+        data_folder_path = params['data_folder_path']
+        selected_row = params['selected_row']
+        total_qty = params['total_qty']
+        
+        # Clean up temporary parameters
+        delattr(self, 'temp_epc_params')
+        
+        if success:
+            # result is the list of created files
+            created_files = result
+            
             # Update job data with EPC information
             job_data["epc_files_created"] = len(created_files)
             job_data["total_qty_with_buffers"] = total_qty
@@ -669,54 +703,61 @@ class JobPageWidget(QWidget):
 
             # Save updated job data
             job_data_path = os.path.join(job_folder_path, "job_data.json")
-            with open(job_data_path, "w") as f:
-                json.dump(job_data, f, indent=4)
-
-            # Update the in-memory data
-            self.all_jobs[selected_row_index.row()] = job_data
-
-            # Also update active source directory if it exists
             try:
-                customer = job_data.get("Customer", "")
-                label_size = job_data.get("Label Size", "")
-                folder_name = os.path.basename(job_folder_path)
-                active_source_path = os.path.join(
-                    config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, folder_name
-                )
+                with open(job_data_path, "w") as f:
+                    json.dump(job_data, f, indent=4)
 
-                if os.path.exists(active_source_path):
-                    # Update the job_data.json in active source
-                    active_job_data_path = os.path.join(
-                        active_source_path, "job_data.json"
+                # Update the in-memory data
+                self.all_jobs[selected_row] = job_data
+
+                # Also update active source directory if it exists
+                try:
+                    customer = job_data.get("Customer", "")
+                    label_size = job_data.get("Label Size", "")
+                    folder_name = os.path.basename(job_folder_path)
+                    active_source_path = os.path.join(
+                        config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, folder_name
                     )
-                    with open(active_job_data_path, "w") as f:
-                        json.dump(job_data, f, indent=4)
 
-                    # Copy new EPC files to active source
-                    active_data_path = os.path.join(active_source_path, "data")
-                    if not os.path.exists(active_data_path):
-                        os.makedirs(active_data_path, exist_ok=True)
-
-                    for file_path in created_files:
-                        file_name = os.path.basename(file_path)
-                        shutil.copy2(
-                            file_path, os.path.join(active_data_path, file_name)
+                    if os.path.exists(active_source_path):
+                        # Update the job_data.json in active source
+                        active_job_data_path = os.path.join(
+                            active_source_path, "job_data.json"
                         )
+                        with open(active_job_data_path, "w") as f:
+                            json.dump(job_data, f, indent=4)
+
+                        # Copy new EPC files to active source
+                        active_data_path = os.path.join(active_source_path, "data")
+                        if not os.path.exists(active_data_path):
+                            os.makedirs(active_data_path, exist_ok=True)
+
+                        for file_path in created_files:
+                            file_name = os.path.basename(file_path)
+                            shutil.copy2(
+                                file_path, os.path.join(active_data_path, file_name)
+                            )
+                except Exception as e:
+                    print(f"Warning: Could not update active source directory: {e}")
+
+                QMessageBox.information(
+                    self,
+                    "EPC Generation Complete",
+                    f"Successfully generated {len(created_files)} EPC database files.\n"
+                    f"Total quantity (with buffers): {total_qty:,}\n"
+                    f"Files saved to: {data_folder_path}",
+                )
             except Exception as e:
-                print(f"Warning: Could not update active source directory: {e}")
-
-            QMessageBox.information(
-                self,
-                "EPC Generation Complete",
-                f"Successfully generated {len(created_files)} EPC database files.\n"
-                f"Total quantity (with buffers): {total_qty:,}\n"
-                f"Files saved to: {data_folder_path}",
-            )
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, "EPC Generation Error", f"Failed to generate EPC database:\n{e}"
-            )
+                QMessageBox.critical(
+                    self, "File Save Error", f"Could not save job data:\n{e}"
+                )
+        else:
+            # result is the error message
+            error_message = result
+            if "cancelled" not in error_message.lower():
+                QMessageBox.critical(
+                    self, "EPC Generation Error", f"Failed to generate EPC database:\n{error_message}"
+                )
 
     def _get_job_data_for_row(self, row):
         if 0 <= row < len(self.all_jobs):
@@ -1151,37 +1192,12 @@ class JobPageWidget(QWidget):
 
                 # Generate EPC database files if requested
                 if job_data.get("Enable EPC Generation", False):
-                    try:
-                        start_serial = int(job_data.get("Serial Number", "1"))
-                        base_qty = int(job_data.get("Quantity", "0"))
-
-                        # Calculate total quantity with buffers
-                        total_qty = calculate_total_quantity_with_percentages(
-                            base_qty,
-                            job_data.get("Include 2% Buffer", False),
-                            job_data.get("Include 7% Buffer", False),
-                        )
-
-                        qty_per_db = int(job_data.get("Qty per DB", "1000"))
-
-                        created_files = generate_epc_database_files(
-                            upc, start_serial, total_qty, qty_per_db, data_folder_path
-                        )
-
-                        print(f"Generated {len(created_files)} EPC database files")
-                        job_data["epc_files_created"] = len(created_files)
-                        job_data["total_qty_with_buffers"] = total_qty
-
-                    except Exception as e:
-                        print(f"EPC database generation failed: {e}")
-                        QMessageBox.warning(
-                            self,
-                            "EPC Generation Warning",
-                            f"Job folder created successfully, but EPC database generation failed:\n{e}",
-                        )
-
-                # Save job data in the main job folder (not in UPC subfolder)
-                job_data_path = os.path.join(job_folder_path, "job_data.json")
+                    # Use threaded generation to prevent UI freezing
+                    self.generate_epc_with_progress(job_data, job_folder_path)
+                    return True  # Early return since EPC generation is async
+                else:
+                    # No EPC generation, continue with normal flow
+                    return self.finalize_job_creation(job_data, job_folder_path)
 
             else:
                 # Use traditional folder structure for non-EPC jobs
@@ -1195,9 +1211,92 @@ class JobPageWidget(QWidget):
                 os.makedirs(job_folder_path, exist_ok=True)
                 print(f"Successfully created traditional job folder: {job_folder_path}")
 
-                job_data_path = os.path.join(job_folder_path, "job_data.json")
+                # Continue with normal job creation flow
+                return self.finalize_job_creation(job_data, job_folder_path)
 
+        except Exception as e:
+            print(f"Job not created: {e}")
+            QMessageBox.critical(self, "Error", f"Could not create job:\n{e}")
+            return False
+
+    def generate_epc_with_progress(self, job_data, job_folder_path):
+        """Generate EPC database files using threaded progress dialog."""
+        try:
+            start_serial = int(job_data.get("Serial Number", "1"))
+            base_qty = int(job_data.get("Quantity", "0"))
+            
+            # Calculate total quantity with buffers
+            total_qty = calculate_total_quantity_with_percentages(
+                base_qty,
+                job_data.get("Include 2% Buffer", False),
+                job_data.get("Include 7% Buffer", False),
+            )
+            
+            qty_per_db = int(job_data.get("Qty per DB", "1000"))
+            upc = job_data.get("UPC Number", "")
+            data_folder_path = job_data.get("data_folder_path", "")
+            
+            # Create and show progress dialog
+            progress_dialog = EPCProgressDialog(
+                upc, start_serial, total_qty, qty_per_db, data_folder_path, self
+            )
+            
+            # Connect completion signal
+            progress_dialog.generation_finished.connect(
+                lambda success, result: self.on_epc_generation_finished(
+                    success, result, job_data, job_folder_path
+                )
+            )
+            
+            # Show the dialog
+            progress_dialog.exec()
+            
+        except Exception as e:
+            print(f"EPC generation setup failed: {e}")
+            QMessageBox.warning(
+                self,
+                "EPC Generation Error",
+                f"Failed to start EPC generation:\n{e}\n\nJob folder created without EPC files.",
+            )
+            # Continue with job creation without EPC files
+            self.finalize_job_creation(job_data, job_folder_path)
+
+    def on_epc_generation_finished(self, success, result, job_data, job_folder_path):
+        """Handle completion of EPC generation."""
+        if success:
+            # result is the list of created files
+            created_files = result
+            print(f"Generated {len(created_files)} EPC database files")
+            job_data["epc_files_created"] = len(created_files)
+            
+            # Calculate total quantity for display
+            base_qty = int(job_data.get("Quantity", "0"))
+            total_qty = calculate_total_quantity_with_percentages(
+                base_qty,
+                job_data.get("Include 2% Buffer", False),
+                job_data.get("Include 7% Buffer", False),
+            )
+            job_data["total_qty_with_buffers"] = total_qty
+        else:
+            # result is the error message
+            error_message = result
+            print(f"EPC database generation failed: {error_message}")
+            
+            if "cancelled" not in error_message.lower():
+                QMessageBox.warning(
+                    self,
+                    "EPC Generation Warning",
+                    f"Job folder created successfully, but EPC database generation failed:\n{error_message}",
+                )
+        
+        # Complete the job creation process
+        self.finalize_job_creation(job_data, job_folder_path)
+
+    def finalize_job_creation(self, job_data, job_folder_path):
+        """Complete the job creation process after EPC generation (if any) is done."""
+        try:
             # Save job data to JSON file
+            job_data_path = os.path.join(job_folder_path, "job_data.json")
             try:
                 with open(job_data_path, "w") as f:
                     json.dump(job_data, f, indent=4)
@@ -1206,58 +1305,68 @@ class JobPageWidget(QWidget):
                     self, "Save Error", f"Could not save job_data.json.\n{e}"
                 )
 
-            # Create checklist PDF in the appropriate location
-            checklist_location = job_folder_path  # Always in main job folder
-            self.create_checklist_pdf(job_data, checklist_location)
+            # Create checklist PDF in the job folder
+            self.create_checklist_pdf(job_data, job_folder_path)
 
             # Copy to active jobs source directory
-            # Extract the final folder name for copying
+            self.copy_to_active_jobs_source(job_data, job_folder_path)
+
+            # Ensure new directories are being monitored
+            self.ensure_directory_monitoring()
+
+            # Show success message with details
+            self.show_job_creation_success(job_data, job_folder_path)
+
+            return True  # Indicate success
+
+        except Exception as e:
+            print(f"Job finalization failed: {e}")
+            QMessageBox.critical(self, "Error", f"Could not finalize job creation:\n{e}")
+            return False
+
+    def copy_to_active_jobs_source(self, job_data, job_folder_path):
+        """Copy job folder to active jobs source directory."""
+        try:
+            customer = job_data.get("Customer")
+            label_size = job_data.get("Label Size")
             final_folder_name = os.path.basename(job_folder_path)
             source_dest_path = os.path.join(
                 config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size
             )
             os.makedirs(source_dest_path, exist_ok=True)
 
-            try:
-                destination_path = os.path.join(source_dest_path, final_folder_name)
-                shutil.copytree(job_folder_path, destination_path)
-                print(f"Successfully copied job folder to: {destination_path}")
-            except FileExistsError:
-                print(
-                    f"Folder already exists in active source, skipping copy: {destination_path}"
-                )
-                QMessageBox.warning(
-                    self,
-                    "Duplicate Warning",
-                    f"A folder with the same name already exists in the active source directory. "
-                    f"The job was created in the primary location, but not copied.",
-                )
-            except Exception as e:
-                QMessageBox.warning(
-                    self,
-                    "Copy Error",
-                    f"Could not copy job folder to active source directory.\n\nError: {e}",
-                )
-
-            # Ensure new directories are being monitored
-            self.ensure_directory_monitoring()
-
-            # Show success message with details
-            success_msg = f"Job created successfully at:\n{job_folder_path}"
-            if enable_epc and job_data.get("epc_files_created", 0) > 0:
-                success_msg += (
-                    f"\n\nEPC Database files generated: {job_data['epc_files_created']}"
-                )
-                success_msg += f"\nTotal quantity (with buffers): {job_data.get('total_qty_with_buffers', 0):,}"
-
-            QMessageBox.information(self, "Success", success_msg)
-
-            return True  # Indicate success
-
+            destination_path = os.path.join(source_dest_path, final_folder_name)
+            shutil.copytree(job_folder_path, destination_path)
+            print(f"Successfully copied job folder to: {destination_path}")
+        except FileExistsError:
+            print(
+                f"Folder already exists in active source, skipping copy: {destination_path}"
+            )
+            QMessageBox.warning(
+                self,
+                "Duplicate Warning",
+                f"A folder with the same name already exists in the active source directory. "
+                f"The job was created in the primary location, but not copied.",
+            )
         except Exception as e:
-            print(f"Job not created: {e}")
-            QMessageBox.critical(self, "Error", f"Could not create job:\n{e}")
-            return False
+            QMessageBox.warning(
+                self,
+                "Copy Error",
+                f"Could not copy job folder to active source directory.\n\nError: {e}",
+            )
+
+    def show_job_creation_success(self, job_data, job_folder_path):
+        """Show job creation success message."""
+        success_msg = f"Job created successfully at:\n{job_folder_path}"
+        
+        enable_epc = job_data.get("Enable EPC Generation", False)
+        if enable_epc and job_data.get("epc_files_created", 0) > 0:
+            success_msg += (
+                f"\n\nEPC Database files generated: {job_data['epc_files_created']}"
+            )
+            success_msg += f"\nTotal quantity (with buffers): {job_data.get('total_qty_with_buffers', 0):,}"
+
+        QMessageBox.information(self, "Success", success_msg)
 
     def closeEvent(self, event):
         """Clean up file system watcher when widget is destroyed."""
