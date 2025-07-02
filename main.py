@@ -25,6 +25,8 @@ from src.tabs.job_page import JobPageWidget
 from src.tabs.archive_page import ArchivePageWidget
 from src.tabs.settings_page import SettingsPageWidget
 from src.tabs.dashboard_page import DashboardPageWidget
+from src.tabs.reports_page import ReportsPageWidget
+from src.tabs.tools_page import ToolsPageWidget
 import src.config as config
 
 
@@ -264,14 +266,18 @@ class MainWindow(QMainWindow):
         # Instantiate pages, passing the base_path to them
         self.dashboard_page = DashboardPageWidget(base_path=self.base_path)
         self.jobs_page = JobPageWidget(base_path=self.base_path)
+        self.tools_page = ToolsPageWidget(base_path=self.base_path)
+        self.reports_page = ReportsPageWidget(base_path=self.base_path)
         self.archive_page = ArchivePageWidget(base_path=self.base_path)
         self.settings_page = SettingsPageWidget()
 
         # Add pages to the stack and create navigation buttons
         self.add_page("Dashboard", self.dashboard_page, "dashboard.png")
         self.add_page("Jobs", self.jobs_page, "customers.png")
-        self.add_page("Settings", self.settings_page, "settings.png")
+        self.add_page("Tools", self.tools_page, "tools.png")
+        self.add_page("Reports", self.reports_page, "reports.png")
         self.add_page("Archive", self.archive_page, "Database.png")
+        self.add_page("Settings", self.settings_page, "settings.png")
         
         # Finalize navigation layout
         self.nav_panel.finalize_navigation()
@@ -286,7 +292,7 @@ class MainWindow(QMainWindow):
         
         # Connect dashboard signals
         self.dashboard_page.navigate_to_jobs.connect(lambda: self.switch_page(1))
-        self.dashboard_page.navigate_to_archive.connect(lambda: self.switch_page(3))
+        self.dashboard_page.navigate_to_archive.connect(lambda: self.switch_page(4))
         self.dashboard_page.create_new_job.connect(self.handle_create_new_job)
 
         # Set central widget

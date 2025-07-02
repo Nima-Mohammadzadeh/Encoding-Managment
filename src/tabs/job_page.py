@@ -1,5 +1,7 @@
 import os
 import json
+import time
+import subprocess
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget,
@@ -847,22 +849,84 @@ class JobPageWidget(QWidget):
 
     def _delete_job_files(self, job_data):
         """Deletes job folders from primary and active source locations."""
-        # 1. Delete from primary location
+        # First, remove all paths related to this job from the file watcher
         primary_path = job_data.get('job_folder_path')
+        
+        if primary_path:
+            # Remove all subdirectories of this job from the file watcher
+            paths_to_remove = []
+            for watched_path in self.file_watcher.directories():
+                if watched_path.startswith(primary_path) or primary_path in watched_path:
+                    paths_to_remove.append(watched_path)
+            
+            # Also check for active source paths
+            try:
+                old_folder_name = os.path.basename(primary_path)
+                active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, job_data.get("Customer", ""), job_data.get("Label Size", ""), old_folder_name)
+                for watched_path in self.file_watcher.directories():
+                    if watched_path.startswith(active_source_path) or active_source_path in watched_path:
+                        paths_to_remove.append(watched_path)
+            except:
+                pass
+            
+            # Remove all identified paths from the watcher
+            for path in paths_to_remove:
+                self.file_watcher.removePath(path)
+                print(f"Removed from file watcher: {path}")
+            
+            # Give the system a moment to release file handles
+            import time
+            time.sleep(0.1)
+        
+        # 1. Delete from primary location
         if primary_path and os.path.exists(primary_path):
             try:
+                # Try to delete normally first
                 shutil.rmtree(primary_path)
                 print(f"Deleted primary folder: {primary_path}")
             except Exception as e:
-                QMessageBox.warning(self, "Delete Error", f"Could not delete primary job folder.\n{e}")
+                # If that fails, try a more forceful approach on Windows
+                if os.name == 'nt':  # Windows
+                    try:
+                        import subprocess
+                        # Use Windows rmdir command with /S /Q flags (remove directory tree quietly)
+                        subprocess.run(['cmd', '/c', 'rmdir', '/S', '/Q', primary_path], 
+                                     capture_output=True, text=True, shell=False)
+                        if not os.path.exists(primary_path):
+                            print(f"Forcefully deleted primary folder: {primary_path}")
+                        else:
+                            raise Exception("Folder still exists after forced deletion attempt")
+                    except Exception as e2:
+                        QMessageBox.warning(self, "Delete Error", 
+                                          f"Could not delete primary job folder.\n{e}\n\nForced deletion also failed: {e2}")
+                else:
+                    QMessageBox.warning(self, "Delete Error", f"Could not delete primary job folder.\n{e}")
         
         # 2. Delete from active jobs source
         try:
-            old_folder_name = os.path.basename(primary_path)
-            active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, job_data.get("Customer"), job_data.get("Label Size"), old_folder_name)
-            if os.path.exists(active_source_path):
-                shutil.rmtree(active_source_path)
-                print(f"Deleted active source folder: {active_source_path}")
+            if primary_path:
+                old_folder_name = os.path.basename(primary_path)
+                active_source_path = os.path.join(config.ACTIVE_JOBS_SOURCE_DIR, job_data.get("Customer", ""), job_data.get("Label Size", ""), old_folder_name)
+                if os.path.exists(active_source_path):
+                    try:
+                        shutil.rmtree(active_source_path)
+                        print(f"Deleted active source folder: {active_source_path}")
+                    except Exception as e:
+                        # Try forceful deletion on Windows
+                        if os.name == 'nt':
+                            try:
+                                import subprocess
+                                subprocess.run(['cmd', '/c', 'rmdir', '/S', '/Q', active_source_path], 
+                                             capture_output=True, text=True, shell=False)
+                                if not os.path.exists(active_source_path):
+                                    print(f"Forcefully deleted active source folder: {active_source_path}")
+                                else:
+                                    raise Exception("Folder still exists after forced deletion attempt")
+                            except Exception as e2:
+                                QMessageBox.warning(self, "Delete Error", 
+                                                  f"Could not delete active source job folder.\n{e}\n\nForced deletion also failed: {e2}")
+                        else:
+                            QMessageBox.warning(self, "Delete Error", f"Could not delete active source job folder.\n{e}")
         except Exception as e:
              QMessageBox.warning(self, "Delete Error", f"Could not delete active source job folder.\n{e}")
 
