@@ -29,9 +29,15 @@ class InteractiveRollTrackerDialog(QDialog):
         else:
             self.roll_tracker_file = None
 
+        # Set up auto-save timer
+        from PySide6.QtCore import QTimer
+        self.auto_save_timer = QTimer()
+        self.auto_save_timer.timeout.connect(self.auto_save_data)
+        self.auto_save_timer.start(10000)  # Auto-save every 10 seconds
+
         self.setup_ui()
         self.load_printers()
-        self.calculate_roll_data()
+        self.validate_and_calculate_roll_data()
         self.load_roll_tracker_data()
 
     def find_job_directory(self):
@@ -130,18 +136,44 @@ class InteractiveRollTrackerDialog(QDialog):
         except Exception as e:
             print(f"Error loading printers: {e}")
 
-    def calculate_roll_data(self):
-        """Calculate roll data with EPC ranges."""
+    def validate_and_calculate_roll_data(self):
+        """Validate job data and calculate roll data with EPC ranges."""
         self.roll_data = []
         
         try:
+            # Validate required job data
             upc = self.job_data.get('UPC Number', '')
             start_serial = int(self.job_data.get('Serial Number', 1))
             quantity = int(self.job_data.get('Quantity', self.job_data.get('Qty', 0)))
             lpr = int(self.job_data.get('LPR', 100))
             
+            if not upc:
+                QMessageBox.warning(self, "Missing Data", "Job is missing UPC Number. Roll tracker may not display EPC ranges correctly.")
+            
+            if quantity <= 0:
+                QMessageBox.critical(self, "Invalid Data", "Job quantity must be greater than 0.")
+                return
+                
+            if lpr <= 0:
+                QMessageBox.critical(self, "Invalid Data", "Labels per roll (LPR) must be greater than 0.")
+                return
+            
+            # Calculate rolls with job metadata
             num_rolls = math.ceil(quantity / lpr)
             current_serial = start_serial
+            
+            # Store job validation info in tracker metadata
+            self.tracker_metadata = {
+                'job_ticket': self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', 'Unknown')),
+                'customer': self.job_data.get('Customer', 'Unknown'),
+                'upc': upc,
+                'total_quantity': quantity,
+                'lpr': lpr,
+                'start_serial': start_serial,
+                'num_rolls': num_rolls,
+                'created_timestamp': datetime.now().isoformat(),
+                'last_updated': datetime.now().isoformat()
+            }
             
             for roll_num in range(1, num_rolls + 1):
                 remaining_qty = quantity - (roll_num - 1) * lpr
@@ -162,27 +194,58 @@ class InteractiveRollTrackerDialog(QDialog):
                     'initials': '',
                     'printer': '',
                     'notes': '',
-                    'timestamps': {}
+                    'notes_history': [],
+                    'timestamps': {},
+                    'created_timestamp': datetime.now().isoformat()
                 }
                 
                 self.roll_data.append(roll_info)
                 current_serial += roll_qty
                 
         except (ValueError, TypeError) as e:
+            QMessageBox.critical(self, "Data Error", f"Error processing job data: {e}")
             print(f"Error calculating roll data: {e}")
 
     def load_roll_tracker_data(self):
-        """Load existing data or create new."""
+        """Load existing data with validation or create new."""
         if not self.roll_tracker_file:
+            self.populate_rolls()
+            self.update_progress()
             return
 
         existing_data = {}
+        saved_metadata = {}
+        
         if os.path.exists(self.roll_tracker_file):
             try:
                 with open(self.roll_tracker_file, 'r') as f:
-                    saved_data = json.load(f)
-                    existing_data = {item['roll_number']: item for item in saved_data}
+                    saved_file = json.load(f)
+                
+                # Handle both old format (direct list) and new format (with metadata)
+                if isinstance(saved_file, list):
+                    # Old format - convert to new format
+                    print("Converting old roll tracker format to new format...")
+                    existing_data = {item['roll_number']: item for item in saved_file}
+                elif isinstance(saved_file, dict) and 'rolls' in saved_file:
+                    # New format with metadata
+                    saved_metadata = saved_file.get('metadata', {})
+                    existing_data = {item['roll_number']: item for item in saved_file['rolls']}
+                    
+                    # Validate saved data matches current job
+                    if not self.validate_saved_data(saved_metadata):
+                        reply = QMessageBox.question(
+                            self, "Data Mismatch", 
+                            "The saved roll tracker data doesn't match the current job specifications. "
+                            "Would you like to regenerate the roll tracker?\n\n"
+                            "Choose 'Yes' to regenerate (recommended) or 'No' to keep existing data.",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        )
+                        if reply == QMessageBox.StandardButton.Yes:
+                            existing_data = {}
+                            saved_metadata = {}
+                        
             except (json.JSONDecodeError, IOError) as e:
+                QMessageBox.warning(self, "Load Error", f"Error loading saved roll tracker data: {e}")
                 print(f"Error loading data: {e}")
 
         # Merge saved data with calculated data
@@ -190,17 +253,42 @@ class InteractiveRollTrackerDialog(QDialog):
             roll_num = roll_info['roll_number']
             if roll_num in existing_data:
                 saved_roll = existing_data[roll_num]
+                # Preserve tracking data but update calculated fields
                 roll_info.update({
                     'status': saved_roll.get('status', 'Not Started'),
                     'completed': saved_roll.get('completed', False),
                     'initials': saved_roll.get('initials', ''),
                     'printer': saved_roll.get('printer', ''),
                     'notes': saved_roll.get('notes', ''),
+                    'notes_history': saved_roll.get('notes_history', []),
                     'timestamps': saved_roll.get('timestamps', {})
                 })
 
         self.populate_rolls()
         self.update_progress()
+        
+        # Auto-save to update format if needed
+        self.auto_save_data()
+    
+    def validate_saved_data(self, saved_metadata):
+        """Validate that saved data matches current job specifications."""
+        if not saved_metadata:
+            return True  # No metadata to validate against
+        
+        current_metadata = getattr(self, 'tracker_metadata', {})
+        
+        # Check critical job parameters
+        validation_fields = ['upc', 'total_quantity', 'lpr', 'start_serial', 'num_rolls']
+        
+        for field in validation_fields:
+            saved_value = saved_metadata.get(field)
+            current_value = current_metadata.get(field)
+            
+            if saved_value != current_value:
+                print(f"Validation failed for {field}: saved={saved_value}, current={current_value}")
+                return False
+        
+        return True
 
     def populate_rolls(self):
         """Create roll widgets."""
@@ -217,7 +305,8 @@ class InteractiveRollTrackerDialog(QDialog):
         """Create refined widget for a single roll."""
         roll_frame = QFrame()
         roll_frame.setFrameShape(QFrame.Shape.Box)
-        roll_frame.setMaximumHeight(50)
+        roll_frame.setMaximumHeight(65)
+        roll_frame.setMinimumHeight(65)
         
         # Simplified status-based styling
         status = roll_info.get('status', 'Not Started')
@@ -260,7 +349,7 @@ class InteractiveRollTrackerDialog(QDialog):
         """)
         
         layout = QHBoxLayout(roll_frame)
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(15)
         
         # Left side: Roll number and data sections
@@ -587,22 +676,78 @@ class InteractiveRollTrackerDialog(QDialog):
         self.progress_label.setText(f"Progress: {completed_rolls}/{total_rolls} completed ({percentage:.1f}%)")
 
     def save_roll_tracker_data(self):
-        """Save current data."""
+        """Save current data with metadata."""
         if not self.roll_tracker_file:
             QMessageBox.warning(self, "Error", "Cannot save: No file path set.")
             return
 
-        # Data is already stored in roll_data, just save it
+        # Update metadata timestamp
+        if hasattr(self, 'tracker_metadata'):
+            self.tracker_metadata['last_updated'] = datetime.now().isoformat()
+            
+            # Calculate completion statistics
+            completed_rolls = sum(1 for roll in self.roll_data if roll.get('completed', False))
+            total_rolls = len(self.roll_data)
+            self.tracker_metadata['completion_stats'] = {
+                'completed_rolls': completed_rolls,
+                'total_rolls': total_rolls,
+                'completion_percentage': (completed_rolls / total_rolls * 100) if total_rolls > 0 else 0
+            }
+
+        # Prepare data structure with metadata
+        save_data = {
+            'metadata': getattr(self, 'tracker_metadata', {}),
+            'rolls': self.roll_data,
+            'version': '1.0'
+        }
+
         try:
             with open(self.roll_tracker_file, 'w') as f:
-                json.dump(self.roll_data, f, indent=4)
-            QMessageBox.information(self, "Success", "Saved!")
+                json.dump(save_data, f, indent=4)
+            QMessageBox.information(self, "Success", "Roll tracker data saved!")
         except IOError as e:
             QMessageBox.critical(self, "Error", f"Error saving: {e}")
+    
+    def auto_save_data(self):
+        """Auto-save data without showing success message."""
+        if not self.roll_tracker_file:
+            return
+
+        try:
+            # Update metadata timestamp
+            if hasattr(self, 'tracker_metadata'):
+                self.tracker_metadata['last_updated'] = datetime.now().isoformat()
+                
+                # Calculate completion statistics
+                completed_rolls = sum(1 for roll in self.roll_data if roll.get('completed', False))
+                total_rolls = len(self.roll_data)
+                self.tracker_metadata['completion_stats'] = {
+                    'completed_rolls': completed_rolls,
+                    'total_rolls': total_rolls,
+                    'completion_percentage': (completed_rolls / total_rolls * 100) if total_rolls > 0 else 0
+                }
+
+            # Prepare data structure with metadata
+            save_data = {
+                'metadata': getattr(self, 'tracker_metadata', {}),
+                'rolls': self.roll_data,
+                'version': '1.0'
+            }
+
+            with open(self.roll_tracker_file, 'w') as f:
+                json.dump(save_data, f, indent=4)
+            print(f"Auto-saved roll tracker data at {datetime.now().strftime('%H:%M:%S')}")
+        except IOError as e:
+            print(f"Auto-save failed: {e}")
 
     def closeEvent(self, event):
         """Handle close event."""
-        self.save_roll_tracker_data()
+        # Stop auto-save timer
+        if hasattr(self, 'auto_save_timer'):
+            self.auto_save_timer.stop()
+        
+        # Final save
+        self.auto_save_data()
         event.accept()
 
 
