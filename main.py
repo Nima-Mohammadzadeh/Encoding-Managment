@@ -35,68 +35,41 @@ class CollapsibleNavButton(QPushButton):
         super().__init__(parent)
         self.text = text
         self.icon_path = icon_path
-        self.is_collapsed = False
         
         self.setCheckable(True)
         self.setMinimumHeight(45)
         self.setMaximumHeight(45)
         
-        # Set up the button with icon and text
-        self.setup_button()
-        
-    def setup_button(self):
         if os.path.exists(self.icon_path):
             icon = QIcon(self.icon_path)
             self.setIcon(icon)
             self.setIconSize(QSize(24, 24))
-        
-        if not self.is_collapsed:
-            self.setText(self.text)
-            self.setStyleSheet("""
-                QPushButton {
-                    text-align: left;
-                    padding-left: 15px;
-                    border: none;
-                    background-color: transparent;
-                    font-size: 14px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(255, 255, 255, 0.1);
-                }
-                QPushButton:checked {
-                    background-color: rgba(255, 255, 255, 0.2);
-                    border-left: 3px solid #0078d4;
-                }
-            """)
-        else:
-            self.setText("")
-            self.setStyleSheet("""
-                QPushButton {
-                    text-align: center;
-                    border: none;
-                    background-color: transparent;
-                    font-size: 14px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(255, 255, 255, 0.1);
-                }
-                QPushButton:checked {
-                    background-color: rgba(255, 255, 255, 0.2);
-                    border-left: 3px solid #0078d4;
-                }
-            """)
-    
-    def set_collapsed(self, collapsed):
-        self.is_collapsed = collapsed
-        self.setup_button()
 
+        self.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                padding-left: 18px; /* Adjusted padding for icon */
+                border: none;
+                background-color: transparent;
+                font-size: 14px;
+                color: #e0e0e0;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:checked {
+                background-color: rgba(255, 255, 255, 0.2);
+                border-left: 3px solid #0078d4;
+                padding-left: 15px; /* Adjust padding when checked */
+            }
+        """)
 
 class CollapsibleNavigationPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_collapsed = False
         self.expanded_width = 200
-        self.collapsed_width = 90  # Adjusted for better spacing
+        self.collapsed_width = 60  # Adjusted for better spacing and icon visibility
         
         self.setFixedWidth(self.expanded_width)
         self.setStyleSheet("""
@@ -120,6 +93,7 @@ class CollapsibleNavigationPanel(QWidget):
         self.main_layout.addWidget(self.nav_frame, 1)
         
         self.nav_buttons = []
+        self.animation = None
         
     def create_header(self):
         self.header_frame = QFrame()
@@ -168,7 +142,6 @@ class CollapsibleNavigationPanel(QWidget):
     def add_nav_button(self, text, icon_name):
         icon_path = os.path.join("src", "icons", icon_name)
         button = CollapsibleNavButton(text, icon_path)
-        button.set_collapsed(self.is_collapsed)
         
         self.nav_buttons.append(button)
         self.nav_layout.addWidget(button)
@@ -181,15 +154,41 @@ class CollapsibleNavigationPanel(QWidget):
     def toggle_collapse(self):
         self.is_collapsed = not self.is_collapsed
         
-        for button in self.nav_buttons:
-            button.set_collapsed(self.is_collapsed)
+        # Animate the panel width
+        self.animation = QPropertyAnimation(self, b"minimumWidth")
+        self.animation.setDuration(300)
+        self.animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
         
+        start_width = self.width()
+        end_width = self.collapsed_width if self.is_collapsed else self.expanded_width
+        
+        self.animation.setStartValue(start_width)
+        self.animation.setEndValue(end_width)
+        
+        # Hide text before shrinking, show after expanding
         if self.is_collapsed:
-            self.setFixedWidth(self.collapsed_width)
+            for button in self.nav_buttons:
+                button.setText("")
         else:
-            self.setFixedWidth(self.expanded_width)
-            
+            self.animation.finished.connect(self.show_button_text)
+
+        self.animation.start()
+        
         self.update_logo()
+
+    def show_button_text(self):
+        """Show button text after animation finishes."""
+        if not self.is_collapsed:
+            for button in self.nav_buttons:
+                button.setText(button.text)
+        
+        # Only disconnect if the animation object exists
+        if self.animation:
+            try:
+                self.animation.finished.disconnect(self.show_button_text)
+            except (TypeError, RuntimeError):
+                # This can happen if the signal is not connected, which is fine.
+                pass
 
     def update_logo(self):
         logo_path = os.path.join("src", "icons", "logo.png")
@@ -304,6 +303,9 @@ class MainWindow(QMainWindow):
 
         # Set initial page
         self.switch_page(0)
+        
+        # Set initial button text based on default state
+        self.nav_panel.show_button_text()
 
     def closeEvent(self, event):
         """Save data when the application is closing."""

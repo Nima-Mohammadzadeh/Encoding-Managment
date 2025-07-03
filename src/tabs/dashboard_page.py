@@ -955,12 +955,4 @@ class DashboardPageWidget(QWidget):
             dialog = RollTrackerDialog(self)
             dialog.exec()
         except Exception as e:
-            print(f"Error opening Roll Tracker: {e}")
-    
-    def navigate_to_tools(self):
-        """Navigate to tools page - will be connected in main window."""
-        pass
-    
-    def navigate_to_reports(self):
-        """Navigate to reports page - will be connected in main window."""
-        pass 
+            print(f"Error opening Roll Tracker: {e}") 

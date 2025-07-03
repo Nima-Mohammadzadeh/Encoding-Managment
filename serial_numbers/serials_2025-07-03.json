@@ -1,5 +1,5 @@
 {
-  "current_serial": 306200,
+  "current_serial": 357200,
   "usage_log": [
     {
       "timestamp": "2025-07-03T13:54:39.015590",
@@ -89,6 +89,19 @@
       "customer": "Peak Technologies",
       "po_number": "tet",
       "ticket_number": "tset",
+      "upc": "747363004879",
+      "label_size": "1.85 x 0.91"
+    },
+    {
+      "timestamp": "2025-07-03T14:41:58.484861",
+      "start_serial": 306200,
+      "end_serial": 357199,
+      "quantity": 51000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "test",
+      "ticket_number": "test",
       "upc": "747363004879",
       "label_size": "1.85 x 0.91"
     }
