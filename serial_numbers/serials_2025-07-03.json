@@ -1,0 +1,99 @@
+{
+  "current_serial": 306200,
+  "usage_log": [
+    {
+      "timestamp": "2025-07-03T13:54:39.015590",
+      "start_serial": 1000,
+      "end_serial": 1099,
+      "quantity": 100,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "",
+      "po_number": "",
+      "ticket_number": "",
+      "upc": "",
+      "label_size": ""
+    },
+    {
+      "timestamp": "2025-07-03T13:55:59.521672",
+      "start_serial": 1100,
+      "end_serial": 1199,
+      "quantity": 100,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "",
+      "po_number": "",
+      "ticket_number": "",
+      "upc": "",
+      "label_size": ""
+    },
+    {
+      "timestamp": "2025-07-03T13:58:08.145930",
+      "start_serial": 1200,
+      "end_serial": 103199,
+      "quantity": 102000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "testtesttesttestq` ",
+      "ticket_number": "testtesttesttesttesttesttesttest",
+      "upc": "747363004879",
+      "label_size": "1.85 x 0.91"
+    },
+    {
+      "timestamp": "2025-07-03T14:02:47.577120",
+      "start_serial": 103200,
+      "end_serial": 154199,
+      "quantity": 51000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "testetsetsetestetetesttestese",
+      "ticket_number": "testetsetsetestetetesttestese",
+      "upc": "747363004879",
+      "label_size": "1.85 x 0.91"
+    },
+    {
+      "timestamp": "2025-07-03T14:04:15.899426",
+      "start_serial": 154200,
+      "end_serial": 205199,
+      "quantity": 51000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "ppppppp",
+      "ticket_number": "ppppppp",
+      "upc": "747363004879",
+      "label_size": "1.85 x 0.91"
+    },
+    {
+      "timestamp": "2025-07-03T14:05:06.201079",
+      "start_serial": 205200,
+      "end_serial": 255199,
+      "quantity": 50000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "ffffffffff",
+      "ticket_number": "ffffffffff",
+      "upc": "747363004879",
+      "label_size": "1.85 x 0.91"
+    },
+    {
+      "timestamp": "2025-07-03T14:16:25.662402",
+      "start_serial": 255200,
+      "end_serial": 306199,
+      "quantity": 51000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "tet",
+      "ticket_number": "tset",
+      "upc": "747363004879",
+      "label_size": "1.85 x 0.91"
+    }
+  ],
+  "created_date": "2025-07-03",
+  "created_by": "Encoding 3",
+  "machine": "SPTLENC003"
+}

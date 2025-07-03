@@ -743,13 +743,14 @@ class EPCGenerationWorker(QThread):
     generation_complete = Signal(list)   # list of created files
     generation_failed = Signal(str)      # error message
     
-    def __init__(self, upc, start_serial, total_qty, qty_per_db, save_location):
+    def __init__(self, upc, start_serial, total_qty, qty_per_db, save_location, job_data=None):
         super().__init__()
         self.upc = upc
         self.start_serial = start_serial
         self.total_qty = total_qty
         self.qty_per_db = qty_per_db
         self.save_location = save_location
+        self.job_data = job_data
         self.is_cancelled = False
         
     def cancel(self):
@@ -794,7 +795,7 @@ class EPCProgressDialog(QProgressDialog):
     
     generation_finished = Signal(bool, object)  # success, result (files list or error message)
     
-    def __init__(self, upc, start_serial, total_qty, qty_per_db, save_location, parent=None):
+    def __init__(self, upc, start_serial, total_qty, qty_per_db, save_location, parent=None, job_data=None):
         super().__init__(parent)
         
         self.setWindowTitle("Generating EPC Database")
@@ -807,7 +808,7 @@ class EPCProgressDialog(QProgressDialog):
         self.setCancelButtonText("Cancel")
         
         # Create worker thread
-        self.worker = EPCGenerationWorker(upc, start_serial, total_qty, qty_per_db, save_location)
+        self.worker = EPCGenerationWorker(upc, start_serial, total_qty, qty_per_db, save_location, job_data)
         
         # Connect signals
         self.worker.progress_updated.connect(self.update_progress)

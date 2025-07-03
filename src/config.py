@@ -45,6 +45,11 @@ TEMPLATE_BASE_PATH_KEY = "paths/template_base"
 DEFAULT_TEMPLATE_BASE_PATH = r'Z:\3 Encoding and Printing Files\Templates'
 TEMPLATE_BASE_PATH = settings.value(TEMPLATE_BASE_PATH_KEY, DEFAULT_TEMPLATE_BASE_PATH)
 
+# Serial numbers base path for centralized serial number management
+SERIAL_NUMBERS_PATH_KEY = "paths/serial_numbers"
+DEFAULT_SERIAL_NUMBERS_PATH = os.path.join(BASE_PATH, "serial_numbers")  # Local directory for now
+SERIAL_NUMBERS_PATH = settings.value(SERIAL_NUMBERS_PATH_KEY, DEFAULT_SERIAL_NUMBERS_PATH)
+
 # --- TXT File Paths for Combobox Data ---
 # These are the .txt files that the job wizard reads from
 CUSTOMER_NAMES_FILE = os.path.join(BASE_PATH, "data", "Customer_names.txt")
@@ -60,6 +65,7 @@ def ensure_dirs_exist():
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
     os.makedirs(ACTIVE_JOBS_SOURCE_DIR, exist_ok=True)
+    os.makedirs(SERIAL_NUMBERS_PATH, exist_ok=True)  # Ensure serial numbers directory exists
     # Also ensure the data directory exists
     os.makedirs(os.path.join(BASE_PATH, "data"), exist_ok=True)
 
@@ -101,3 +107,15 @@ def save_template_base_path(path):
 def get_template_base_path():
     """Get the current template base path."""
     return TEMPLATE_BASE_PATH
+
+
+def save_serial_numbers_path(path):
+    """Save the serial numbers path to settings."""
+    settings.setValue(SERIAL_NUMBERS_PATH_KEY, path)
+    global SERIAL_NUMBERS_PATH
+    SERIAL_NUMBERS_PATH = path
+
+
+def get_serial_numbers_path():
+    """Get the current serial numbers path."""
+    return SERIAL_NUMBERS_PATH

@@ -1,0 +1,34 @@
+{
+  "current_serial": 11000,
+  "usage_log": [
+    {
+      "timestamp": "2025-07-03T13:47:14.556038",
+      "start_serial": 1000,
+      "end_serial": 5999,
+      "quantity": 5000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "PO12345",
+      "ticket_number": "JT67890",
+      "upc": "123456789012",
+      "label_size": "1.85 x 0.91"
+    },
+    {
+      "timestamp": "2025-07-03T13:53:29.545555",
+      "start_serial": 6000,
+      "end_serial": 10999,
+      "quantity": 5000,
+      "user": "Encoding 3",
+      "machine": "SPTLENC003",
+      "customer": "Peak Technologies",
+      "po_number": "PO12345",
+      "ticket_number": "JT67890",
+      "upc": "123456789012",
+      "label_size": "1.85 x 0.91"
+    }
+  ],
+  "created_date": "2025-07-03",
+  "created_by": "Encoding 3",
+  "machine": "SPTLENC003"
+}

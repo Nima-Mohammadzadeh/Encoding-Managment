@@ -359,6 +359,21 @@ class EncodingPage(QWizardPage):
         self.qty = QuantityLineEdit()  # Use custom quantity input
         self.lpr = QLineEdit()
         
+        # Add manual serial override checkbox
+        self.manual_serial_override = QCheckBox("Manual Serial Override")
+        self.manual_serial_override.setToolTip("Check this to manually enter serial numbers instead of using centralized allocation")
+        self.manual_serial_override.stateChanged.connect(self.toggle_manual_serial)
+        
+        # Create a widget to hold the serial number field and its label
+        self.serial_widget = QWidget()
+        self.serial_layout = QHBoxLayout(self.serial_widget)
+        self.serial_layout.setContentsMargins(0, 0, 0, 0)
+        self.serial_layout.addWidget(QLabel("Serial Number: *"))
+        self.serial_layout.addWidget(self.serial_number)
+        
+        # Hide serial input by default (centralized management)
+        self.serial_widget.hide()
+        
         # Add read-only field for calculated rolls
         self.rolls_display = QLineEdit()
         self.rolls_display.setReadOnly(True)
@@ -378,13 +393,62 @@ class EncodingPage(QWizardPage):
         self.layout = QFormLayout(self)
         self.layout.addRow("Item: *", self.item)
         self.layout.addRow("Qty: *", self.qty)
-        self.layout.addRow("UPC Number: *", self.upc_number) 
-        self.layout.addRow("Serial Number: *", self.serial_number)
+        self.layout.addRow("UPC Number: *", self.upc_number)
+        
+        # Add manual serial override checkbox
+        self.layout.addRow("", self.manual_serial_override)
+        
+        # Add serial number widget (hidden by default)
+        self.layout.addRow("", self.serial_widget)
+        
         self.layout.addRow("LPR: *", self.lpr)
         self.layout.addRow("Rolls:", self.rolls_display)
         
         # Add error label at the bottom
         self.layout.addRow("", self.error_label)
+        
+        # Auto-populate serial on initial load
+        self.auto_populate_serial()
+    
+    def toggle_manual_serial(self, state):
+        """Toggle manual serial input based on checkbox state."""
+        is_manual = state == Qt.CheckState.Checked.value
+        
+        if is_manual:
+            self.serial_widget.show()
+            # Clear any auto-populated serial when switching to manual
+            if not self.serial_number.text().strip():
+                self.serial_number.setPlaceholderText("Enter starting serial number")
+        else:
+            self.serial_widget.hide()
+            # Auto-populate from centralized source when switching to automatic
+            self.auto_populate_serial()
+    
+    def auto_populate_serial(self):
+        """Auto-populate serial number from centralized source."""
+        try:
+            from src.utils.serial_manager import get_serial_manager
+            import src.config as config
+            
+            serial_manager = get_serial_manager(config.get_serial_numbers_path())
+            
+            # Validate the path first
+            is_valid, message = serial_manager.validate_base_path()
+            if not is_valid:
+                print(f"Warning: Serial numbers path not accessible: {message}")
+                raise Exception(f"Path validation failed: {message}")
+            
+            next_serial = serial_manager.get_next_serial()
+            
+            # Set the serial number but don't show the field
+            self.serial_number.setText(str(next_serial))
+            print(f"Auto-populated serial number: {next_serial}")
+            
+        except Exception as e:
+            print(f"Warning: Could not auto-populate serial from centralized source: {e}")
+            print("Using default serial number. Centralized tracking will not be available.")
+            # Set a default if centralized system fails
+            self.serial_number.setText("1000")
 
     def validatePage(self):
         """Validate all required fields before proceeding to next page."""
@@ -404,8 +468,18 @@ class EncodingPage(QWizardPage):
         elif not self.upc_number.is_valid():
             errors.append("UPC Number must be exactly 12 digits")
         
-        if not self.serial_number.text().strip():
-            errors.append("Serial Number is required")
+        # Only validate serial number if manual override is enabled
+        if self.manual_serial_override.isChecked():
+            if not self.serial_number.text().strip():
+                errors.append("Serial Number is required when using Manual Serial Override")
+            elif not self.serial_number.text().strip().isdigit():
+                errors.append("Serial Number must be a valid number")
+        else:
+            # For automatic serial, ensure we have a valid value
+            if not self.serial_number.text().strip():
+                self.auto_populate_serial()  # Try to populate again
+            if not self.serial_number.text().strip():
+                errors.append("Could not allocate serial number from centralized source")
         
         if not self.lpr.text().strip():
             errors.append("LPR is required")
@@ -483,7 +557,8 @@ class EncodingPage(QWizardPage):
             "Item": self.item.text(),
             "Quantity": self.qty.get_numeric_value(),  # Return numeric value without commas
             "LPR": self.lpr.text(),
-            "Rolls": str(calculated_rolls)
+            "Rolls": str(calculated_rolls),
+            "Manual Serial Override": self.manual_serial_override.isChecked()
         }
 
 
@@ -639,6 +714,11 @@ class EPCDatabasePage(QWizardPage):
         self.template_status_label.setWordWrap(True)
         template_layout.addRow("Template Status:", self.template_status_label)
         
+        # Add a label for serial number information
+        self.serial_info_label = QLabel("Serial Numbers (Centralized Management)")
+        self.serial_info_label.setWordWrap(True)
+        template_layout.addRow("Serial Info:", self.serial_info_label)
+
         layout.addWidget(self.template_info_group)
 
         # Error label
@@ -807,6 +887,7 @@ class EPCDatabasePage(QWizardPage):
             label_size = job_details_page.label_size.currentText().strip()
             inlay_type = job_details_page.inlay_type.currentText().strip()
             
+            # Update template status
             if customer and label_size:
                 from src.utils.epc_conversion import get_template_path_with_inlay, list_available_templates
                 
@@ -856,12 +937,94 @@ class EPCDatabasePage(QWizardPage):
                         else:
                             self.template_status_label.setText(f"⚠ No templates found for label size: {label_size}\nJob will be created without template file.")
                             self.template_status_label.setStyleSheet("color: red;")
-            else:
-                self.template_status_label.setText("Customer and Label Size required for template lookup")
-                self.template_status_label.setStyleSheet("color: gray;")
+            
+            # Update serial number information
+            self.update_serial_info()
+                    
         except Exception as e:
-            self.template_status_label.setText(f"Error checking template: {str(e)}")
+            print(f"Error updating template info: {e}")
+            self.template_status_label.setText("Error loading template information")
             self.template_status_label.setStyleSheet("color: red;")
+    
+    def update_serial_info(self):
+        """Update serial number information from centralized serial manager."""
+        try:
+            from src.utils.serial_manager import get_serial_manager
+            
+            # Initialize serial manager with configured path
+            serial_manager = get_serial_manager(config.get_serial_numbers_path())
+            
+            # Validate access to serial numbers path
+            is_valid, message = serial_manager.validate_base_path()
+            
+            if is_valid:
+                next_serial = serial_manager.get_next_serial()
+                
+                # Calculate range for the current job
+                try:
+                    # Get base quantity from previous page (EncodingPage)
+                    wizard = self.wizard()
+                    encoding_page = wizard.page(wizard.pageIds()[1])  # EncodingPage is index 1
+                    base_qty_text = encoding_page.qty.get_numeric_value().strip()
+                    
+                    if base_qty_text and base_qty_text.isdigit():
+                        base_qty = int(base_qty_text)
+                        total_qty = calculate_total_quantity_with_percentages(
+                            base_qty,
+                            self.include_2_percent.isChecked(),
+                            self.include_7_percent.isChecked()
+                        )
+                        
+                        end_serial = next_serial + total_qty - 1
+                        
+                        # Update the starting serial number field to the next available
+                        self.serial_number.setText(str(next_serial))
+                        
+                        # Show serial range information
+                        daily_summary = serial_manager.get_daily_usage_summary()
+                        total_allocated_today = daily_summary.get('total_allocated', 0)
+                        
+                        self.serial_info_label.setText(
+                            f"📊 Serial Numbers (Centralized Management)\n"
+                            f"Next Available: {next_serial:,}\n"
+                            f"Range for this job: {next_serial:,} - {end_serial:,}\n"
+                            f"Total allocated today: {total_allocated_today:,}\n"
+                            f"Path: {serial_manager.base_path}"
+                        )
+                        self.serial_info_label.setStyleSheet("color: green;")
+                    else:
+                        self.serial_info_label.setText(
+                            f"📊 Serial Numbers (Centralized Management)\n"
+                            f"Next Available: {next_serial:,}\n"
+                            f"Enter quantity on previous page to see range\n"
+                            f"Path: {serial_manager.base_path}"
+                        )
+                        self.serial_info_label.setStyleSheet("color: orange;")
+                        
+                except Exception as qty_error:
+                    print(f"Error calculating quantity: {qty_error}")
+                    self.serial_info_label.setText(
+                        f"📊 Serial Numbers (Centralized Management)\n"
+                        f"Next Available: {next_serial:,}\n"
+                        f"Path: {serial_manager.base_path}"
+                    )
+                    self.serial_info_label.setStyleSheet("color: green;")
+            else:
+                self.serial_info_label.setText(
+                    f"⚠️ Centralized Serial Management Unavailable\n"
+                    f"{message}\n"
+                    f"Using fallback mode - jobs will use default serials"
+                )
+                self.serial_info_label.setStyleSheet("color: orange;")
+                
+        except Exception as e:
+            print(f"Error updating serial info: {e}")
+            self.serial_info_label.setText(
+                f"❌ Serial Manager Error\n"
+                f"Centralized tracking unavailable\n"
+                f"Jobs will use fallback serial numbers"
+            )
+            self.serial_info_label.setStyleSheet("color: orange;")
 
     def generate_preview(self):
         """Generate and display EPC preview data."""

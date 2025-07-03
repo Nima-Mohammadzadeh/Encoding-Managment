@@ -213,6 +213,8 @@ class DashboardPageWidget(QWidget):
     # Signals
     navigate_to_jobs = Signal()
     navigate_to_archive = Signal()
+    navigate_to_tools = Signal()
+    navigate_to_reports = Signal()
     create_new_job = Signal()
     
     def __init__(self, base_path):
@@ -344,77 +346,84 @@ class DashboardPageWidget(QWidget):
                 background-color: #2d2d30;
                 border: 1px solid #464647;
                 border-radius: 6px;
-                padding: 10px;
+                padding: 12px;
             }
         """)
         actions_layout = QVBoxLayout(actions_frame)
+        actions_layout.setSpacing(8)
         
         actions_title = QLabel("Quick Actions")
         actions_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
         actions_layout.addWidget(actions_title)
         
-        # Action buttons
+        # Create grid layout for action buttons (2 columns)
+        actions_grid = QGridLayout()
+        actions_grid.setSpacing(6)
+        actions_grid.setContentsMargins(0, 0, 0, 0)
+        
+        # Primary action button (spans both columns)
         new_job_btn = QPushButton("➕ Create New Job")
-        new_job_btn.setMinimumHeight(32)
+        new_job_btn.setMinimumHeight(36)
         new_job_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
                 color: white;
                 border: none;
-                padding: 8px;
-                border-radius: 3px;
+                padding: 10px;
+                border-radius: 4px;
                 font-weight: bold;
                 font-size: 11px;
-                text-align: left;
+                text-align: center;
             }
             QPushButton:hover {
                 background-color: #106ebe;
             }
         """)
         new_job_btn.clicked.connect(self.create_new_job.emit)
-        actions_layout.addWidget(new_job_btn)
+        actions_grid.addWidget(new_job_btn, 0, 0, 1, 2)  # Span 2 columns
         
-        view_jobs_btn = QPushButton("📋 View All Jobs")
-        view_jobs_btn.setMinimumHeight(32)
-        view_jobs_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3d3d40;
-                color: white;
-                border: 1px solid #464647;
-                padding: 8px;
-                border-radius: 3px;
-                font-weight: bold;
-                font-size: 11px;
-                text-align: left;
-            }
-            QPushButton:hover {
-                background-color: #4d4d50;
-                border: 1px solid #0078d4;
-            }
-        """)
-        view_jobs_btn.clicked.connect(self.navigate_to_jobs.emit)
-        actions_layout.addWidget(view_jobs_btn)
+        # Secondary action buttons in grid (2x3 grid)
+        buttons = [
+            ("📋 View Jobs", self.navigate_to_jobs.emit, "#27ae60"),
+            ("📁 Archive", self.navigate_to_archive.emit, "#6c757d"),
+            ("🔧 Tools", self.navigate_to_tools, "#f39c12"),
+            ("📊 Reports", self.navigate_to_reports, "#9b59b6"),
+            ("🗃️ Database Gen", self.open_database_generator, "#17a2b8"),
+            ("📑 Roll Tracker", self.open_roll_tracker, "#e74c3c")
+        ]
         
-        archive_btn = QPushButton("📁 View Archive")
-        archive_btn.setMinimumHeight(32)
-        archive_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3d3d40;
-                color: white;
-                border: 1px solid #464647;
-                padding: 8px;
-                border-radius: 3px;
-                font-weight: bold;
-                font-size: 11px;
-                text-align: left;
-            }
-            QPushButton:hover {
-                background-color: #4d4d50;
-                border: 1px solid #0078d4;
-            }
-        """)
-        archive_btn.clicked.connect(self.navigate_to_archive.emit)
-        actions_layout.addWidget(archive_btn)
+        for i, (text, callback, color) in enumerate(buttons):
+            btn = QPushButton(text)
+            btn.setMinimumHeight(28)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {color};
+                    color: white;
+                    border: none;
+                    padding: 6px 8px;
+                    border-radius: 3px;
+                    font-weight: bold;
+                    font-size: 10px;
+                    text-align: center;
+                }}
+                QPushButton:hover {{
+                    background-color: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                }}
+            """)
+            
+            # Connect to callback
+            if hasattr(callback, 'emit'):
+                btn.clicked.connect(callback.emit)
+            else:
+                btn.clicked.connect(callback)
+            
+            # Add to grid (3 rows, 2 columns starting from row 1)
+            row = 1 + (i // 2)
+            col = i % 2
+            actions_grid.addWidget(btn, row, col)
+        
+        actions_layout.addLayout(actions_grid)
         
         left_column.addWidget(actions_frame)
         
@@ -928,4 +937,30 @@ class DashboardPageWidget(QWidget):
                         stats_text += f"{customer}: {count} ({percentage:.1f}%)\n"
                     self.job_stats_label.setText(stats_text)
                 else:
-                    self.job_stats_label.setText("No active jobs") 
+                    self.job_stats_label.setText("No active jobs")
+    
+    def open_database_generator(self):
+        """Open the Database Generator tool from dashboard."""
+        try:
+            from src.widgets.database_generator_dialog import DatabaseGeneratorDialog
+            dialog = DatabaseGeneratorDialog(self)
+            dialog.exec()
+        except Exception as e:
+            print(f"Error opening Database Generator: {e}")
+    
+    def open_roll_tracker(self):
+        """Open the Roll Tracker tool from dashboard."""
+        try:
+            from src.widgets.roll_tracker_dialog import RollTrackerDialog
+            dialog = RollTrackerDialog(self)
+            dialog.exec()
+        except Exception as e:
+            print(f"Error opening Roll Tracker: {e}")
+    
+    def navigate_to_tools(self):
+        """Navigate to tools page - will be connected in main window."""
+        pass
+    
+    def navigate_to_reports(self):
+        """Navigate to reports page - will be connected in main window."""
+        pass 

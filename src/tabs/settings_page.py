@@ -73,6 +73,9 @@ class SettingsPageWidget(QWidget):
         self.template_base_path_edit = self.create_directory_setting_row(
             dir_layout, "Template Base Path:", "Base folder containing customer/label_size template structure for EPC generation.", config.TEMPLATE_BASE_PATH
         )
+        self.serial_numbers_path_edit = self.create_directory_setting_row(
+            dir_layout, "Serial Numbers Path:", "Base folder for centralized serial number management and logging.", config.SERIAL_NUMBERS_PATH
+        )
 
         scroll_layout.addWidget(directory_group)
 
@@ -200,6 +203,8 @@ class SettingsPageWidget(QWidget):
             config.ACTIVE_JOBS_SOURCE_DIR = self.active_jobs_source_dir_edit.text()
             
             config.save_template_base_path(self.template_base_path_edit.text())
+            
+            config.save_serial_numbers_path(self.serial_numbers_path_edit.text())
             
             config.ensure_dirs_exist()
             

@@ -293,6 +293,8 @@ class MainWindow(QMainWindow):
         # Connect dashboard signals
         self.dashboard_page.navigate_to_jobs.connect(lambda: self.switch_page(1))
         self.dashboard_page.navigate_to_archive.connect(lambda: self.switch_page(4))
+        self.dashboard_page.navigate_to_tools.connect(lambda: self.switch_page(2))
+        self.dashboard_page.navigate_to_reports.connect(lambda: self.switch_page(3))
         self.dashboard_page.create_new_job.connect(self.handle_create_new_job)
 
         # Set central widget

@@ -1234,8 +1234,18 @@ class JobPageWidget(QWidget):
     def generate_epc_with_progress(self, job_data, job_folder_path):
         """Generate EPC database files using threaded progress dialog."""
         try:
-            start_serial = int(job_data.get("Serial Number", "1"))
             base_qty = int(job_data.get("Quantity", "0"))
+            
+            # Check if manual serial override was used
+            manual_override = job_data.get("Manual Serial Override", False)
+            
+            if manual_override:
+                # Use the manually entered serial number
+                start_serial = int(job_data.get("Serial Number", "1"))
+                print(f"Using manual serial override: starting at {start_serial}")
+            else:
+                # Use centralized serial allocation
+                from src.utils.serial_manager import allocate_serials_for_job
             
             # Calculate total quantity with buffers
             total_qty = calculate_total_quantity_with_percentages(
@@ -1244,13 +1254,31 @@ class JobPageWidget(QWidget):
                 job_data.get("Include 7% Buffer", False),
             )
             
+            if not manual_override:
+                # Try centralized serial allocation, fallback to manual if fails
+                try:
+                    from src.utils.serial_manager import allocate_serials_for_job
+                    start_serial, end_serial = allocate_serials_for_job(total_qty, job_data)
+                    print(f"Allocated serials {start_serial} - {end_serial} for job {job_data.get('Ticket#', 'Unknown')}")
+                except Exception as e:
+                    print(f"Warning: Centralized serial allocation failed: {e}")
+                    print("Falling back to manual serial from wizard input")
+                    # Fallback to using the serial from wizard (which was auto-populated)
+                    start_serial = int(job_data.get("Serial Number", "1000"))
+                    end_serial = start_serial + total_qty - 1
+                    print(f"Fallback: using serials {start_serial} - {end_serial} for job {job_data.get('Ticket#', 'Unknown')}")
+            else:
+                # Calculate end serial for manual override
+                end_serial = start_serial + total_qty - 1
+                print(f"Manual override: using serials {start_serial} - {end_serial} for job {job_data.get('Ticket#', 'Unknown')}")
+            
             qty_per_db = int(job_data.get("Qty per DB", "1000"))
             upc = job_data.get("UPC Number", "")
             data_folder_path = job_data.get("data_folder_path", "")
             
-            # Create and show progress dialog
+            # Create and show progress dialog with job data for logging
             self.epc_progress_dialog = EPCProgressDialog(
-                upc, start_serial, total_qty, qty_per_db, data_folder_path, self
+                upc, start_serial, total_qty, qty_per_db, data_folder_path, self, job_data
             )
             
             # Connect completion signal
