@@ -1,0 +1,723 @@
+import os
+import json
+import math
+from datetime import datetime
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
+    QFrame, QLineEdit, QCheckBox, QComboBox, QTextEdit, QGroupBox,
+    QMessageBox, QGridLayout, QSizePolicy, QWidget
+)
+from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QFont, QPalette
+from src.utils.epc_conversion import generate_epc
+
+class InteractiveRollTrackerDialog(QDialog):
+    """Interactive Roll Tracker - A standalone window for tracking roll completion progress."""
+    
+    def __init__(self, job_data, parent=None):
+        super().__init__(parent)
+        self.job_data = job_data
+        self.roll_widgets = []
+        
+        # Make this dialog non-modal
+        self.setModal(False)
+        
+        # Find job folder and set up data file path
+        self.job_folder_path = self.find_job_directory()
+        if self.job_folder_path:
+            self.roll_tracker_file = os.path.join(self.job_folder_path, "interactive_roll_tracker_data.json")
+        else:
+            self.roll_tracker_file = None
+
+        self.setup_ui()
+        self.load_printers()
+        self.calculate_roll_data()
+        self.load_roll_tracker_data()
+
+    def find_job_directory(self):
+        """Find the correct job directory."""
+        if 'job_folder_path' in self.job_data and os.path.exists(self.job_data['job_folder_path']):
+            return self.job_data['job_folder_path']
+        return self.job_data.get("active_source_folder_path")
+
+    def setup_ui(self):
+        """Set up the user interface."""
+        job_ticket = self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', 'Unknown'))
+        customer = self.job_data.get('Customer', 'Unknown')
+        self.setWindowTitle(f"Roll Tracker - {customer} - #{job_ticket}")
+        self.setMinimumSize(600, 400)
+        self.resize(800, 600)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(5)
+        
+        # Compact header
+        header_frame = self.create_header()
+        main_layout.addWidget(header_frame)
+
+        # Compact scroll area for rolls
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumHeight(200)
+        scroll_content = QWidget()
+        self.rolls_layout = QVBoxLayout(scroll_content)
+        self.rolls_layout.setSpacing(2)
+        scroll_area.setWidget(scroll_content)
+        main_layout.addWidget(scroll_area)
+        
+        # Compact footer
+        footer_layout = QHBoxLayout()
+        footer_layout.addStretch()
+        
+        self.save_button = QPushButton("Save")
+        self.save_button.setMaximumWidth(80)
+        self.save_button.clicked.connect(self.save_roll_tracker_data)
+        footer_layout.addWidget(self.save_button)
+        
+        main_layout.addLayout(footer_layout)
+
+    def create_header(self):
+        """Create compact header with job info and progress."""
+        header_frame = QFrame()
+        header_frame.setMaximumHeight(40)
+        header_frame.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e1e;
+                border-bottom: 1px solid #333333;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+        """)
+        
+        layout = QHBoxLayout(header_frame)
+        layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Job info on left
+        job_ticket = self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', 'Unknown'))
+        customer = self.job_data.get('Customer', 'Unknown')
+        upc = self.job_data.get('UPC Number', 'N/A')
+        
+        info_label = QLabel(f"{customer} | UPC: {upc}")
+        font = QFont()
+        font.setBold(True)
+        info_label.setFont(font)
+        layout.addWidget(info_label)
+        
+        layout.addStretch()
+        
+        # Progress on right
+        self.progress_label = QLabel("Progress: 0/0")
+        self.progress_label.setStyleSheet("""
+            QLabel {
+                color: #0078d4;
+                font-weight: bold;
+            }
+        """)
+        layout.addWidget(self.progress_label)
+        
+        return header_frame
+
+    def load_printers(self):
+        """Load printer names."""
+        self.printers = ["Select Printer"]
+        try:
+            printer_file = os.path.join("data", "Printers.txt")
+            if os.path.exists(printer_file):
+                with open(printer_file, 'r') as f:
+                    self.printers.extend([line.strip() for line in f if line.strip()])
+        except Exception as e:
+            print(f"Error loading printers: {e}")
+
+    def calculate_roll_data(self):
+        """Calculate roll data with EPC ranges."""
+        self.roll_data = []
+        
+        try:
+            upc = self.job_data.get('UPC Number', '')
+            start_serial = int(self.job_data.get('Serial Number', 1))
+            quantity = int(self.job_data.get('Quantity', self.job_data.get('Qty', 0)))
+            lpr = int(self.job_data.get('LPR', 100))
+            
+            num_rolls = math.ceil(quantity / lpr)
+            current_serial = start_serial
+            
+            for roll_num in range(1, num_rolls + 1):
+                remaining_qty = quantity - (roll_num - 1) * lpr
+                roll_qty = min(lpr, remaining_qty)
+                
+                start_epc = generate_epc(upc, current_serial) if upc else "N/A"
+                end_epc = generate_epc(upc, current_serial + roll_qty - 1) if upc else "N/A"
+                
+                roll_info = {
+                    'roll_number': roll_num,
+                    'quantity': roll_qty,
+                    'start_serial': current_serial,
+                    'end_serial': current_serial + roll_qty - 1,
+                    'start_epc': start_epc,
+                    'end_epc': end_epc,
+                    'status': 'Not Started',
+                    'completed': False,
+                    'initials': '',
+                    'printer': '',
+                    'notes': '',
+                    'timestamps': {}
+                }
+                
+                self.roll_data.append(roll_info)
+                current_serial += roll_qty
+                
+        except (ValueError, TypeError) as e:
+            print(f"Error calculating roll data: {e}")
+
+    def load_roll_tracker_data(self):
+        """Load existing data or create new."""
+        if not self.roll_tracker_file:
+            return
+
+        existing_data = {}
+        if os.path.exists(self.roll_tracker_file):
+            try:
+                with open(self.roll_tracker_file, 'r') as f:
+                    saved_data = json.load(f)
+                    existing_data = {item['roll_number']: item for item in saved_data}
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"Error loading data: {e}")
+
+        # Merge saved data with calculated data
+        for roll_info in self.roll_data:
+            roll_num = roll_info['roll_number']
+            if roll_num in existing_data:
+                saved_roll = existing_data[roll_num]
+                roll_info.update({
+                    'status': saved_roll.get('status', 'Not Started'),
+                    'completed': saved_roll.get('completed', False),
+                    'initials': saved_roll.get('initials', ''),
+                    'printer': saved_roll.get('printer', ''),
+                    'notes': saved_roll.get('notes', ''),
+                    'timestamps': saved_roll.get('timestamps', {})
+                })
+
+        self.populate_rolls()
+        self.update_progress()
+
+    def populate_rolls(self):
+        """Create roll widgets."""
+        for widget in self.roll_widgets:
+            widget.deleteLater()
+        self.roll_widgets = []
+
+        for roll_info in self.roll_data:
+            roll_widget = self.create_roll_widget(roll_info)
+            self.rolls_layout.addWidget(roll_widget)
+            self.roll_widgets.append(roll_widget)
+
+    def create_roll_widget(self, roll_info):
+        """Create refined widget for a single roll."""
+        roll_frame = QFrame()
+        roll_frame.setFrameShape(QFrame.Shape.Box)
+        roll_frame.setMaximumHeight(50)
+        
+        # Simplified status-based styling
+        status = roll_info.get('status', 'Not Started')
+        if status == 'Completed':
+            bg_color = "#1a3d2e"  # Subtle dark green
+            border_color = "#2e5d48"
+        elif status == 'Running':
+            bg_color = "#1a2e3d"  # Subtle dark blue
+            border_color = "#2e485d"
+        else:  # Not Started or Paused
+            bg_color = "#2d2d30"  # Standard dark
+            border_color = "#404040"
+
+        roll_frame.setStyleSheet(f"""
+            QFrame {{ 
+                border: 1px solid {border_color}; 
+                background-color: {bg_color};
+                margin: 1px;
+                border-radius: 4px;
+            }}
+            QLabel {{ 
+                color: #ffffff;
+                background-color: transparent;
+            }}
+            QPushButton {{
+                background-color: transparent;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 3px;
+                color: #ffffff;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background-color: #404040;
+            }}
+            QPushButton:checked {{
+                background-color: #0078d4;
+                border-color: #0078d4;
+            }}
+        """)
+        
+        layout = QHBoxLayout(roll_frame)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(15)
+        
+        # Left side: Roll number and data sections
+        left_layout = QHBoxLayout()
+        left_layout.setSpacing(15)
+        
+        # Roll number section
+        roll_section = QVBoxLayout()
+        roll_section.setSpacing(2)
+        
+        roll_header = QLabel("ROLL")
+        roll_header.setStyleSheet("color: #606060; font-size: 8px; font-weight: bold;")
+        roll_section.addWidget(roll_header)
+        
+        roll_label = QLabel(f"{roll_info['roll_number']}")
+        font = QFont()
+        font.setBold(True)
+        font.setPointSize(12)
+        roll_label.setFont(font)
+        roll_label.setStyleSheet("color: #ffffff;")
+        roll_section.addWidget(roll_label)
+        
+        left_layout.addLayout(roll_section)
+        
+        # EPC section
+        epc_section = QVBoxLayout()
+        epc_section.setSpacing(2)
+        
+        epc_header = QLabel("EPC RANGE")
+        epc_header.setStyleSheet("color: #606060; font-size: 8px; font-weight: bold;")
+        epc_section.addWidget(epc_header)
+        
+        start_epc_short = roll_info['start_epc'][-8:] if len(roll_info['start_epc']) > 8 else roll_info['start_epc']
+        end_epc_short = roll_info['end_epc'][-8:] if len(roll_info['end_epc']) > 8 else roll_info['end_epc']
+        epc_label = QLabel(f"{start_epc_short} → {end_epc_short}")
+        epc_font = QFont("Consolas", 10)
+        epc_label.setFont(epc_font)
+        epc_label.setStyleSheet("color: #a0a0a0;")
+        epc_section.addWidget(epc_label)
+        
+        left_layout.addLayout(epc_section)
+        
+        # Serial number section
+        serial_section = QVBoxLayout()
+        serial_section.setSpacing(2)
+        
+        serial_header = QLabel("SERIAL RANGE")
+        serial_header.setStyleSheet("color: #606060; font-size: 8px; font-weight: bold;")
+        serial_section.addWidget(serial_header)
+        
+        start_serial = roll_info.get('start_serial', 0)
+        end_serial = roll_info.get('end_serial', 0)
+        if 'start_serial' not in roll_info:
+            # Calculate serials if not stored
+            quantity = roll_info['quantity']
+            start_serial = int(self.job_data.get('Serial Number', 1))
+            # Calculate the starting serial for this specific roll
+            for i, r in enumerate(self.roll_data):
+                if r['roll_number'] == roll_info['roll_number']:
+                    # Sum quantities of previous rolls
+                    prev_qty = sum(prev_roll['quantity'] for prev_roll in self.roll_data[:i])
+                    start_serial += prev_qty
+                    end_serial = start_serial + quantity - 1
+                    roll_info['start_serial'] = start_serial
+                    roll_info['end_serial'] = end_serial
+                    break
+        
+        serial_label = QLabel(f"{start_serial:,} → {end_serial:,}")
+        serial_font = QFont("Consolas", 10)
+        serial_label.setFont(serial_font)
+        serial_label.setStyleSheet("color: #a0a0a0;")
+        serial_section.addWidget(serial_label)
+        
+        left_layout.addLayout(serial_section)
+        
+        # Quantity section
+        qty_section = QVBoxLayout()
+        qty_section.setSpacing(2)
+        
+        qty_header = QLabel("QTY")
+        qty_header.setStyleSheet("color: #606060; font-size: 8px; font-weight: bold;")
+        qty_section.addWidget(qty_header)
+        
+        qty_label = QLabel(f"{roll_info['quantity']:,}")
+        qty_label.setStyleSheet("color: #808080; font-size: 11px; font-weight: bold;")
+        qty_section.addWidget(qty_label)
+        
+        left_layout.addLayout(qty_section)
+        
+        layout.addLayout(left_layout)
+        layout.addStretch()
+        
+        # Center: Simplified status indicator
+        status_widget = self.create_status_indicator(roll_info, roll_frame)
+        layout.addWidget(status_widget)
+        
+        layout.addStretch()
+        
+        # Right side: Action buttons
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(8)
+        
+        # Start/Pause/Resume button
+        if status == 'Not Started':
+            action_btn = QPushButton("START")
+            action_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #0078d4;
+                    border: none;
+                    padding: 4px 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1084d8;
+                }
+            """)
+            action_btn.clicked.connect(lambda: self.start_roll(roll_info, roll_frame))
+        elif status == 'Running':
+            action_btn = QPushButton("PAUSE")
+            action_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #d4a007;
+                    border: none;
+                    padding: 4px 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #e6b100;
+                }
+            """)
+            action_btn.clicked.connect(lambda: self.pause_roll(roll_info, roll_frame))
+        elif status == 'Paused':
+            action_btn = QPushButton("RESUME")
+            action_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #0078d4;
+                    border: none;
+                    padding: 4px 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1084d8;
+                }
+            """)
+            action_btn.clicked.connect(lambda: self.resume_roll(roll_info, roll_frame))
+        else:  # Completed
+            action_btn = QPushButton("DONE")
+            action_btn.setEnabled(False)
+            action_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #2e5d48;
+                    border: none;
+                    padding: 4px 12px;
+                    font-weight: bold;
+                    color: #a0a0a0;
+                }
+            """)
+        
+        if status != 'Completed':
+            actions_layout.addWidget(action_btn)
+        
+        # Complete button (only if running or paused)
+        if status in ['Running', 'Paused']:
+            complete_btn = QPushButton("FINISH")
+            complete_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #2e5d48;
+                    border: none;
+                    padding: 4px 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #3c8c61;
+                }
+            """)
+            complete_btn.clicked.connect(lambda: self.complete_roll(roll_info, roll_frame))
+            actions_layout.addWidget(complete_btn)
+        
+        # Notes button (always visible)
+        notes_btn = QPushButton("📝")
+        notes_btn.setMaximumWidth(30)
+        notes_btn.setToolTip("View/Add Notes")
+        actions_layout.addWidget(notes_btn)
+        notes_btn.clicked.connect(lambda: self.open_notes_dialog(roll_info))
+        
+        layout.addLayout(actions_layout)
+        
+        # Store references
+        roll_frame.setProperty("roll_data", {
+            "roll_info": roll_info
+        })
+        
+        return roll_frame
+    
+    def create_status_indicator(self, roll_info, roll_frame):
+        """Create a simple status indicator."""
+        status = roll_info.get('status', 'Not Started')
+        
+        if status == 'Not Started':
+            indicator = QLabel("⚪ Ready")
+            indicator.setStyleSheet("color: #808080; font-size: 11px;")
+        elif status == 'Running':
+            indicator = QLabel("🔵 Running")
+            indicator.setStyleSheet("color: #0078d4; font-size: 11px; font-weight: bold;")
+        elif status == 'Paused':
+            indicator = QLabel("🟡 Paused")
+            indicator.setStyleSheet("color: #d4a007; font-size: 11px; font-weight: bold;")
+        else:  # Completed
+            indicator = QLabel("🟢 Done")
+            indicator.setStyleSheet("color: #2e5d48; font-size: 11px; font-weight: bold;")
+        
+        return indicator
+    
+    def start_roll(self, roll_info, roll_frame):
+        """Start a roll."""
+        timestamp = datetime.now().strftime("%H:%M")
+        note_text = f"[{timestamp}] STARTED"
+        
+        if 'notes_history' not in roll_info:
+            roll_info['notes_history'] = []
+        roll_info['notes_history'].append(note_text)
+        
+        roll_info['status'] = 'Running'
+        self.rebuild_roll_widget(roll_info, roll_frame)
+        self.update_progress()
+    
+    def pause_roll(self, roll_info, roll_frame):
+        """Pause a roll."""
+        timestamp = datetime.now().strftime("%H:%M")
+        note_text = f"[{timestamp}] PAUSED"
+        
+        if 'notes_history' not in roll_info:
+            roll_info['notes_history'] = []
+        roll_info['notes_history'].append(note_text)
+        
+        roll_info['status'] = 'Paused'
+        self.rebuild_roll_widget(roll_info, roll_frame)
+        self.update_progress()
+    
+    def resume_roll(self, roll_info, roll_frame):
+        """Resume a paused roll."""
+        timestamp = datetime.now().strftime("%H:%M")
+        note_text = f"[{timestamp}] RESUMED"
+        
+        if 'notes_history' not in roll_info:
+            roll_info['notes_history'] = []
+        roll_info['notes_history'].append(note_text)
+        
+        roll_info['status'] = 'Running'
+        self.rebuild_roll_widget(roll_info, roll_frame)
+        self.update_progress()
+    
+    def complete_roll(self, roll_info, roll_frame):
+        """Handle roll completion with printer assignment."""
+        from PySide6.QtWidgets import QInputDialog
+        
+        # Get initials
+        initials, ok1 = QInputDialog.getText(self, "Complete Roll", "Enter your initials:")
+        if not ok1 or not initials.strip():
+            return
+        
+        # Get printer
+        printer, ok2 = QInputDialog.getItem(self, "Complete Roll", "Select printer used:", 
+                                          [p for p in self.printers if p != "Select Printer"], 0, False)
+        if not ok2 or not printer:
+            return
+        
+        # Add completion note
+        timestamp = datetime.now().strftime("%H:%M")
+        completion_note = f"[{timestamp}] COMPLETED by {initials.strip()} on {printer}"
+        
+        if 'notes_history' not in roll_info:
+            roll_info['notes_history'] = []
+        roll_info['notes_history'].append(completion_note)
+        
+        # Update roll info
+        roll_info['status'] = 'Completed'
+        roll_info['completed'] = True
+        roll_info['initials'] = initials.strip()
+        roll_info['printer'] = printer
+        roll_info['completion_timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Rebuild this roll widget to show completed state
+        self.rebuild_roll_widget(roll_info, roll_frame)
+        self.update_progress()
+    
+    def rebuild_roll_widget(self, roll_info, old_frame):
+        """Rebuild a single roll widget."""
+        # Find the position of the old frame
+        index = -1
+        for i in range(self.rolls_layout.count()):
+            if self.rolls_layout.itemAt(i).widget() == old_frame:
+                index = i
+                break
+        
+        if index >= 0:
+            # Remove old widget
+            self.rolls_layout.removeWidget(old_frame)
+            old_frame.deleteLater()
+            
+            # Create new widget
+            new_widget = self.create_roll_widget(roll_info)
+            self.rolls_layout.insertWidget(index, new_widget)
+            
+            # Update the roll_widgets list
+            for i, widget in enumerate(self.roll_widgets):
+                if widget == old_frame:
+                    self.roll_widgets[i] = new_widget
+                    break
+    
+    def open_notes_dialog(self, roll_info):
+        """Open notes dialog for viewing/adding notes."""
+        dialog = NotesDialog(roll_info, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Notes were updated in the dialog
+            pass
+
+    def update_progress(self):
+        """Update progress display."""
+        total_rolls = len(self.roll_data)
+        completed_rolls = sum(1 for roll in self.roll_data if roll.get('completed', False))
+        percentage = (completed_rolls / total_rolls) * 100 if total_rolls > 0 else 0
+        
+        self.progress_label.setText(f"Progress: {completed_rolls}/{total_rolls} completed ({percentage:.1f}%)")
+
+    def save_roll_tracker_data(self):
+        """Save current data."""
+        if not self.roll_tracker_file:
+            QMessageBox.warning(self, "Error", "Cannot save: No file path set.")
+            return
+
+        # Data is already stored in roll_data, just save it
+        try:
+            with open(self.roll_tracker_file, 'w') as f:
+                json.dump(self.roll_data, f, indent=4)
+            QMessageBox.information(self, "Success", "Saved!")
+        except IOError as e:
+            QMessageBox.critical(self, "Error", f"Error saving: {e}")
+
+    def closeEvent(self, event):
+        """Handle close event."""
+        self.save_roll_tracker_data()
+        event.accept()
+
+
+class NotesDialog(QDialog):
+    """Dialog for viewing and adding notes to a roll."""
+    
+    def __init__(self, roll_info, parent=None):
+        super().__init__(parent)
+        self.roll_info = roll_info
+        self.setWindowTitle(f"Notes - Roll {roll_info['roll_number']}")
+        self.setMinimumSize(400, 300)
+        self.resize(500, 400)
+        
+        # Set dark theme styles
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e1e;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+            QTextEdit {
+                background-color: #2d2d30;
+                color: #ffffff;
+                border: 1px solid #3c3c3c;
+                border-radius: 3px;
+            }
+            QTextEdit:read-only {
+                background-color: #252526;
+            }
+            QPushButton {
+                background-color: #0078d4;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #1084d8;
+            }
+            QPushButton:pressed {
+                background-color: #006cc1;
+            }
+        """)
+        
+        self.setup_ui()
+        self.load_notes()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # Title
+        title = QLabel(f"Roll {self.roll_info['roll_number']} Notes")
+        font = QFont()
+        font.setBold(True)
+        font.setPointSize(12)
+        title.setFont(font)
+        layout.addWidget(title)
+        
+        # Notes history (read-only)
+        history_label = QLabel("Notes History:")
+        layout.addWidget(history_label)
+        
+        self.notes_history = QTextEdit()
+        self.notes_history.setReadOnly(True)
+        self.notes_history.setMaximumHeight(200)
+        layout.addWidget(self.notes_history)
+        
+        # Add new note
+        add_note_label = QLabel("Add New Note:")
+        layout.addWidget(add_note_label)
+        
+        self.new_note_edit = QTextEdit()
+        self.new_note_edit.setMaximumHeight(80)
+        self.new_note_edit.setPlaceholderText("Type your note here...")
+        layout.addWidget(self.new_note_edit)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        add_btn = QPushButton("Add Note")
+        add_btn.clicked.connect(self.add_note)
+        button_layout.addWidget(add_btn)
+        
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+        
+        layout.addLayout(button_layout)
+    
+    def load_notes(self):
+        """Load and display notes history."""
+        notes_history = self.roll_info.get('notes_history', [])
+        if notes_history:
+            self.notes_history.setText('\n'.join(notes_history))
+        else:
+            self.notes_history.setText("No notes yet.")
+    
+    def add_note(self):
+        """Add a new note with timestamp."""
+        note_text = self.new_note_edit.toPlainText().strip()
+        if not note_text:
+            return
+        
+        timestamp = datetime.now().strftime("%H:%M")
+        formatted_note = f"[{timestamp}] {note_text}"
+        
+        if 'notes_history' not in self.roll_info:
+            self.roll_info['notes_history'] = []
+        
+        self.roll_info['notes_history'].append(formatted_note)
+        
+        # Refresh the display
+        self.load_notes()
+        self.new_note_edit.clear()
+        
+        QMessageBox.information(self, "Note Added", "Note added successfully!") 

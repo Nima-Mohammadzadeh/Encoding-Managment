@@ -29,6 +29,7 @@ from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer
 from src.wizards.new_job_wizard import NewJobWizard
 from src.widgets.job_details_dialog import JobDetailsDialog, EPCProgressDialog, FileOperationProgressDialog, PDFProgressDialog
+from src.widgets.interactive_roll_tracker_dialog import InteractiveRollTrackerDialog
 import src.config as config
 from src.utils.epc_conversion import (
     create_upc_folder_structure,
@@ -355,6 +356,10 @@ class JobPageWidget(QWidget):
         menu.addAction("Edit Job", self.edit_selected_job_in_details)
         menu.addSeparator()
 
+        # Add Roll Tracker option
+        menu.addAction("Open Roll Tracker", self.open_roll_tracker)
+        menu.addSeparator()
+
         # Check if job has UPC and can generate EPC database
         selected_row_index = selection_model.selectedRows()[0]
         job_data = self._get_job_data_for_row(selected_row_index.row())
@@ -522,6 +527,28 @@ class JobPageWidget(QWidget):
         dialog.enter_edit_mode()
 
         dialog.exec()
+
+    def open_roll_tracker(self):
+        """Open the interactive roll tracker for the selected job."""
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+
+        selected_row_index = selection_model.selectedRows()[0]
+        job_data = self._get_job_data_for_row(selected_row_index.row())
+
+        if job_data:
+            # Check if the job has the required data for roll tracking
+            quantity = job_data.get('Quantity', job_data.get('Qty', 0))
+            
+            if not quantity or (isinstance(quantity, str) and not quantity.isdigit()):
+                QMessageBox.warning(self, "Invalid Job Data", 
+                                  "This job does not have valid quantity data for roll tracking.")
+                return
+            
+            # Create and show the roll tracker dialog (non-modal)
+            tracker_dialog = InteractiveRollTrackerDialog(job_data, self)
+            tracker_dialog.show()  # Use show() instead of exec() to make it non-modal
 
     def delete_selected_job(self):
         selection_model = self.jobs_table.selectionModel()

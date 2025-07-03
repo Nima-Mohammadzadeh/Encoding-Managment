@@ -15,6 +15,8 @@ import fitz
 import shutil
 import src.config as config
 
+
+
 class JobDetailsDialog(QDialog):
     job_updated = Signal(dict)
     job_archived = Signal(dict)
@@ -271,6 +273,14 @@ class JobDetailsDialog(QDialog):
         QMessageBox.information(self, "Success", "Job details have been updated.")
 
     def cancel_edit(self):
+        # Remove the edit tab when cancelling
+        if hasattr(self, 'edit_tab'):
+            edit_tab_index = self.tab_widget.indexOf(self.edit_tab)
+            if edit_tab_index != -1:
+                self.tab_widget.removeTab(edit_tab_index)
+                self.edit_tab.deleteLater()
+                del self.edit_tab
+                
         self.tab_widget.setCurrentIndex(0)
     
     def complete_job(self):
