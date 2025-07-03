@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QGridLayout, QSizePolicy, QWidget
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont, QPalette
+from PySide6.QtGui import QFont, QPalette, QIcon
 from src.utils.epc_conversion import generate_epc
 
 class InteractiveRollTrackerDialog(QDialog):
@@ -29,11 +29,22 @@ class InteractiveRollTrackerDialog(QDialog):
         else:
             self.roll_tracker_file = None
 
-        # Set up auto-save timer
-        from PySide6.QtCore import QTimer
+        # Set up auto-save timer and file monitoring
+        from PySide6.QtCore import QTimer, QFileSystemWatcher
         self.auto_save_timer = QTimer()
         self.auto_save_timer.timeout.connect(self.auto_save_data)
-        self.auto_save_timer.start(10000)  # Auto-save every 10 seconds
+        self.auto_save_timer.start(5000)  # Auto-save every 5 seconds for better responsiveness
+        
+        # Set up file system watcher for live updates from other users
+        self.file_watcher = QFileSystemWatcher()
+        if self.roll_tracker_file and os.path.exists(os.path.dirname(self.roll_tracker_file)):
+            self.file_watcher.addPath(os.path.dirname(self.roll_tracker_file))
+            self.file_watcher.fileChanged.connect(self.on_tracker_file_changed)
+            
+        # Refresh timer to debounce rapid file changes
+        self.refresh_timer = QTimer()
+        self.refresh_timer.setSingleShot(True)
+        self.refresh_timer.timeout.connect(self.refresh_from_file)
 
         self.setup_ui()
         self.load_printers()
@@ -452,9 +463,10 @@ class InteractiveRollTrackerDialog(QDialog):
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(8)
         
-        # Start/Pause/Resume button
+        # Start/Pause/Resume button with icons
         if status == 'Not Started':
             action_btn = QPushButton("START")
+            # Could add a start/play icon here if you have one, otherwise keep text
             action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #0078d4;
@@ -468,69 +480,102 @@ class InteractiveRollTrackerDialog(QDialog):
             """)
             action_btn.clicked.connect(lambda: self.start_roll(roll_info, roll_frame))
         elif status == 'Running':
-            action_btn = QPushButton("PAUSE")
+            action_btn = QPushButton()
+            pause_icon_path = os.path.join("src", "icons", "pause.png")
+            if os.path.exists(pause_icon_path):
+                action_btn.setIcon(QIcon(pause_icon_path))
+                action_btn.setToolTip("Pause Roll")
+            else:
+                action_btn.setText("PAUSE")
             action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #d4a007;
                     border: none;
-                    padding: 4px 12px;
+                    padding: 6px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
                     background-color: #e6b100;
                 }
             """)
+            action_btn.setMaximumWidth(40)
             action_btn.clicked.connect(lambda: self.pause_roll(roll_info, roll_frame))
         elif status == 'Paused':
-            action_btn = QPushButton("RESUME")
+            action_btn = QPushButton()
+            resume_icon_path = os.path.join("src", "icons", "resume.png")
+            if os.path.exists(resume_icon_path):
+                action_btn.setIcon(QIcon(resume_icon_path))
+                action_btn.setToolTip("Resume Roll")
+            else:
+                action_btn.setText("RESUME")
             action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #0078d4;
                     border: none;
-                    padding: 4px 12px;
+                    padding: 6px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
                     background-color: #1084d8;
                 }
             """)
+            action_btn.setMaximumWidth(40)
             action_btn.clicked.connect(lambda: self.resume_roll(roll_info, roll_frame))
-        else:  # Completed
-            action_btn = QPushButton("DONE")
+        else:  # Completed - show check icon
+            action_btn = QPushButton()
+            check_icon_path = os.path.join("src", "icons", "check.png")
+            if os.path.exists(check_icon_path):
+                action_btn.setIcon(QIcon(check_icon_path))
+            else:
+                action_btn.setText("✓")  # Fallback checkmark
             action_btn.setEnabled(False)
+            action_btn.setMaximumWidth(35)
+            action_btn.setToolTip(f"Completed by: {roll_info.get('initials', 'Unknown')}")
             action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2e5d48;
                     border: none;
-                    padding: 4px 12px;
-                    font-weight: bold;
+                    padding: 4px;
                     color: #a0a0a0;
                 }
             """)
         
-        if status != 'Completed':
-            actions_layout.addWidget(action_btn)
+        # Always add the action button (it's either an action or completion indicator)
+        actions_layout.addWidget(action_btn)
         
-        # Complete button (only if running or paused)
+        # Complete button (only if running or paused) - using stop icon
         if status in ['Running', 'Paused']:
-            complete_btn = QPushButton("FINISH")
+            complete_btn = QPushButton()
+            stop_icon_path = os.path.join("src", "icons", "stop.png")
+            if os.path.exists(stop_icon_path):
+                complete_btn.setIcon(QIcon(stop_icon_path))
+                complete_btn.setToolTip("Finish Roll")
+            else:
+                complete_btn.setText("FINISH")
             complete_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2e5d48;
                     border: none;
-                    padding: 4px 12px;
+                    padding: 6px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
                     background-color: #3c8c61;
                 }
             """)
+            complete_btn.setMaximumWidth(40)
             complete_btn.clicked.connect(lambda: self.complete_roll(roll_info, roll_frame))
             actions_layout.addWidget(complete_btn)
         
-        # Notes button (always visible)
-        notes_btn = QPushButton("📝")
+        # Notes button (always visible) - using PNG icon
+        notes_btn = QPushButton()
+        notes_icon_path = os.path.join("src", "icons", "note.png")
+        if os.path.exists(notes_icon_path):
+            notes_btn.setIcon(QIcon(notes_icon_path))
+        else:
+            notes_btn.setText("📝")  # Fallback emoji
         notes_btn.setMaximumWidth(30)
+        notes_btn.setMaximumHeight(30)
         notes_btn.setToolTip("View/Add Notes")
         actions_layout.addWidget(notes_btn)
         notes_btn.clicked.connect(lambda: self.open_notes_dialog(roll_info))
@@ -573,6 +618,11 @@ class InteractiveRollTrackerDialog(QDialog):
         roll_info['notes_history'].append(note_text)
         
         roll_info['status'] = 'Running'
+        roll_info['timestamps']['started'] = datetime.now().isoformat()
+        
+        # Immediate save for real-time updates
+        self.auto_save_data()
+        
         self.rebuild_roll_widget(roll_info, roll_frame)
         self.update_progress()
     
@@ -586,6 +636,11 @@ class InteractiveRollTrackerDialog(QDialog):
         roll_info['notes_history'].append(note_text)
         
         roll_info['status'] = 'Paused'
+        roll_info['timestamps']['paused'] = datetime.now().isoformat()
+        
+        # Immediate save for real-time updates
+        self.auto_save_data()
+        
         self.rebuild_roll_widget(roll_info, roll_frame)
         self.update_progress()
     
@@ -599,6 +654,11 @@ class InteractiveRollTrackerDialog(QDialog):
         roll_info['notes_history'].append(note_text)
         
         roll_info['status'] = 'Running'
+        roll_info['timestamps']['resumed'] = datetime.now().isoformat()
+        
+        # Immediate save for real-time updates
+        self.auto_save_data()
+        
         self.rebuild_roll_widget(roll_info, roll_frame)
         self.update_progress()
     
@@ -631,6 +691,10 @@ class InteractiveRollTrackerDialog(QDialog):
         roll_info['initials'] = initials.strip()
         roll_info['printer'] = printer
         roll_info['completion_timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        roll_info['timestamps']['completed'] = datetime.now().isoformat()
+        
+        # Immediate save for real-time updates - completion is critical
+        self.auto_save_data()
         
         # Rebuild this roll widget to show completed state
         self.rebuild_roll_widget(roll_info, roll_frame)
@@ -714,15 +778,23 @@ class InteractiveRollTrackerDialog(QDialog):
             return
 
         try:
-            # Update metadata timestamp
+            # Update metadata timestamp and add user context
             if hasattr(self, 'tracker_metadata'):
                 self.tracker_metadata['last_updated'] = datetime.now().isoformat()
+                self.tracker_metadata['last_updated_by'] = os.getenv('USERNAME', 'Unknown User')
+                self.tracker_metadata['last_updated_machine'] = os.getenv('COMPUTERNAME', 'Unknown Machine')
                 
                 # Calculate completion statistics
                 completed_rolls = sum(1 for roll in self.roll_data if roll.get('completed', False))
                 total_rolls = len(self.roll_data)
+                running_rolls = sum(1 for roll in self.roll_data if roll.get('status') == 'Running')
+                paused_rolls = sum(1 for roll in self.roll_data if roll.get('status') == 'Paused')
+                
                 self.tracker_metadata['completion_stats'] = {
                     'completed_rolls': completed_rolls,
+                    'running_rolls': running_rolls,
+                    'paused_rolls': paused_rolls,
+                    'not_started_rolls': total_rolls - completed_rolls - running_rolls - paused_rolls,
                     'total_rolls': total_rolls,
                     'completion_percentage': (completed_rolls / total_rolls * 100) if total_rolls > 0 else 0
                 }
@@ -740,11 +812,64 @@ class InteractiveRollTrackerDialog(QDialog):
         except IOError as e:
             print(f"Auto-save failed: {e}")
 
+    def on_tracker_file_changed(self, path):
+        """Handle changes to the tracker file from other users."""
+        print(f"Roll tracker file changed detected: {path}")
+        # Use timer to debounce rapid changes (wait 2 seconds after last change)
+        self.refresh_timer.start(2000)
+    
+    def refresh_from_file(self):
+        """Refresh roll tracker data from file changes by other users."""
+        if not self.roll_tracker_file or not os.path.exists(self.roll_tracker_file):
+            return
+        
+        try:
+            print("Refreshing roll tracker from file changes...")
+            
+            # Store current UI state to preserve user's current focus
+            current_notes_text = ""
+            
+            # Load updated data from file
+            with open(self.roll_tracker_file, 'r') as f:
+                saved_file = json.load(f)
+            
+            if isinstance(saved_file, dict) and 'rolls' in saved_file:
+                updated_rolls = {item['roll_number']: item for item in saved_file['rolls']}
+                
+                # Update our data while preserving UI state
+                for roll_info in self.roll_data:
+                    roll_num = roll_info['roll_number']
+                    if roll_num in updated_rolls:
+                        updated_roll = updated_rolls[roll_num]
+                        # Update tracking data from other users
+                        roll_info.update({
+                            'status': updated_roll.get('status', roll_info['status']),
+                            'completed': updated_roll.get('completed', roll_info['completed']),
+                            'initials': updated_roll.get('initials', roll_info['initials']),
+                            'printer': updated_roll.get('printer', roll_info['printer']),
+                            'notes': updated_roll.get('notes', roll_info['notes']),
+                            'notes_history': updated_roll.get('notes_history', roll_info['notes_history']),
+                            'timestamps': updated_roll.get('timestamps', roll_info['timestamps'])
+                        })
+                
+                # Refresh the UI to show updates
+                self.populate_rolls()
+                self.update_progress()
+                
+                print("Roll tracker refreshed from external changes")
+                
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error refreshing from file: {e}")
+    
     def closeEvent(self, event):
         """Handle close event."""
-        # Stop auto-save timer
+        # Stop timers
         if hasattr(self, 'auto_save_timer'):
             self.auto_save_timer.stop()
+        if hasattr(self, 'refresh_timer'):
+            self.refresh_timer.stop()
+        if hasattr(self, 'file_watcher'):
+            self.file_watcher.deleteLater()
         
         # Final save
         self.auto_save_data()
@@ -757,6 +882,7 @@ class NotesDialog(QDialog):
     def __init__(self, roll_info, parent=None):
         super().__init__(parent)
         self.roll_info = roll_info
+        self.parent_tracker = parent  # Reference to main tracker for saving
         self.setWindowTitle(f"Notes - Roll {roll_info['roll_number']}")
         self.setMinimumSize(400, 300)
         self.resize(500, 400)
@@ -840,26 +966,59 @@ class NotesDialog(QDialog):
         layout.addLayout(button_layout)
     
     def load_notes(self):
-        """Load and display notes history."""
+        """Load and display notes history with enhanced formatting."""
         notes_history = self.roll_info.get('notes_history', [])
         if notes_history:
-            self.notes_history.setText('\n'.join(notes_history))
+            # Format notes with better readability
+            formatted_notes = []
+            for note in notes_history:
+                # Add extra spacing for EPC-specific notes
+                if '@EPC:' in note:
+                    formatted_notes.append(f"📍 {note}")
+                else:
+                    formatted_notes.append(f"   {note}")
+            
+            self.notes_history.setText('\n'.join(formatted_notes))
         else:
-            self.notes_history.setText("No notes yet.")
+            self.notes_history.setText("No notes yet.\n\nClick 'Add Note' to record events or observations for this roll.")
     
     def add_note(self):
-        """Add a new note with timestamp."""
+        """Add a new note with timestamp and EPC position."""
         note_text = self.new_note_edit.toPlainText().strip()
         if not note_text:
             return
         
+        # Prompt for EPC position
+        from PySide6.QtWidgets import QInputDialog
+        epc_last5, ok = QInputDialog.getText(
+            self, 
+            "EPC Position", 
+            "Enter the last 5 characters of the EPC where this note applies:\n\n"
+            f"Roll {self.roll_info['roll_number']} EPC Range:\n"
+            f"{self.roll_info.get('start_epc', 'N/A')} → {self.roll_info.get('end_epc', 'N/A')}\n\n"
+            "Last 5 characters of EPC:",
+            text=""
+        )
+        
+        if not ok:
+            return  # User cancelled
+        
         timestamp = datetime.now().strftime("%H:%M")
-        formatted_note = f"[{timestamp}] {note_text}"
+        
+        # Format note with EPC position if provided
+        if epc_last5.strip():
+            formatted_note = f"[{timestamp}] @EPC:{epc_last5.strip().upper()} - {note_text}"
+        else:
+            formatted_note = f"[{timestamp}] {note_text}"
         
         if 'notes_history' not in self.roll_info:
             self.roll_info['notes_history'] = []
         
         self.roll_info['notes_history'].append(formatted_note)
+        
+        # Trigger immediate save in parent tracker for real-time updates
+        if hasattr(self.parent_tracker, 'auto_save_data'):
+            self.parent_tracker.auto_save_data()
         
         # Refresh the display
         self.load_notes()
