@@ -1101,7 +1101,7 @@ class JobPageWidget(QWidget):
         self.delete_next_path()
 
     def create_job_folder_and_checklist(self, job_data):
-        """Enhanced job creation with EPC functionality and improved folder structure."""
+        """Enhanced job creation with EPC functionality, improved folder structure, and template copying."""
         if job_data.get("Shared Drive"):
             base_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
         elif job_data.get("Desktop"):
@@ -1170,8 +1170,18 @@ class JobPageWidget(QWidget):
                 label_size_path = os.path.join(customer_path, label_size)
                 job_folder_path = os.path.join(label_size_path, job_folder_name)
 
+                # Create main job folder
                 job_data["job_folder_path"] = job_folder_path
                 os.makedirs(job_folder_path, exist_ok=True)
+                
+                # Create print folder for traditional structure
+                print_folder_path = os.path.join(job_folder_path, "print")
+                os.makedirs(print_folder_path, exist_ok=True)
+                job_data["print_folder_path"] = print_folder_path
+                
+                # Copy template for traditional structure
+                self.copy_template_to_job(job_data, customer, label_size, print_folder_path)
+                
                 print(f"Successfully created traditional job folder: {job_folder_path}")
 
                 # Continue with normal job creation flow
@@ -1181,6 +1191,45 @@ class JobPageWidget(QWidget):
             print(f"Job not created: {e}")
             QMessageBox.critical(self, "Error", f"Could not create job:\n{e}")
             return False
+
+    def copy_template_to_job(self, job_data, customer, label_size, print_folder_path):
+        """Copy .btw template file to the job's print folder."""
+        try:
+            from src.utils.epc_conversion import get_template_path_with_inlay
+            
+            template_base_path = config.get_template_base_path()
+            
+            if not template_base_path or not os.path.exists(template_base_path):
+                print(f"Template base path not configured or doesn't exist: {template_base_path}")
+                return
+            
+            # Get inlay type for better template matching
+            inlay_type = job_data.get("Inlay Type", "")
+            
+            # Use enhanced template lookup with inlay type
+            template_path = get_template_path_with_inlay(template_base_path, customer, label_size, inlay_type)
+            
+            if template_path and os.path.exists(template_path):
+                # Determine destination filename priority: UPC > Job Ticket > PO Number
+                job_ticket = self.get_job_data_value(job_data, "Ticket#", "Job Ticket#")
+                po_num = job_data.get("PO#", "")
+                upc = job_data.get("UPC Number", "")
+                
+                if upc:
+                    destination_filename = f"{upc}.btw"
+                elif job_ticket:
+                    destination_filename = f"{job_ticket}.btw"
+                else:
+                    destination_filename = f"{po_num}.btw"
+                
+                destination_template = os.path.join(print_folder_path, destination_filename)
+                shutil.copy(template_path, destination_template)
+                print(f"Template copied: {os.path.basename(template_path)} -> {destination_filename}")
+            else:
+                print(f"No template found for {customer} - {label_size} (Inlay: {inlay_type})")
+                    
+        except Exception as e:
+            print(f"Error copying template: {e}")
 
     def generate_epc_with_progress(self, job_data, job_folder_path):
         """Generate EPC database files using threaded progress dialog."""
@@ -1427,7 +1476,7 @@ class JobPageWidget(QWidget):
         self._create_job_folders(job_data, [self.network_path])
 
     def _create_job_folders(self, job_data, save_locations=None):
-        """Create job folders in specified locations (kept for backward compatibility)."""
+        """Create job folders in specified locations with template copying (kept for backward compatibility)."""
         try:
             # If no save_locations provided, fall back to the default network path
             if not save_locations:
@@ -1487,6 +1536,12 @@ class JobPageWidget(QWidget):
                     continue
 
                 os.makedirs(job_path)
+                
+                # Create print folder and copy template
+                print_folder_path = os.path.join(job_path, "print")
+                os.makedirs(print_folder_path, exist_ok=True)
+                self.copy_template_to_job(job_data, customer, label_size, print_folder_path)
+                
                 created_folders.append(job_path)
                 print(f"Successfully created job folder: {job_path}")
 

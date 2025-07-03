@@ -256,16 +256,17 @@ def create_upc_folder_structure(base_path, customer, label_size, po_number, tick
     os.makedirs(print_folder_path, exist_ok=True)
     os.makedirs(data_folder_path, exist_ok=True)
     
-    # Copy template if available
+    # Copy template if available using enhanced lookup
     if template_base_path:
-        template_path = os.path.join(template_base_path, customer, label_size, f"Template {label_size}.btw")
-        if os.path.exists(template_path):
+        # For EPC jobs, we need to get inlay type from somewhere - using a fallback approach
+        template_path = get_template_path_with_inlay(template_base_path, customer, label_size, None)
+        if template_path and os.path.exists(template_path):
             import shutil
             destination_template = os.path.join(print_folder_path, f"{upc}.btw")
             shutil.copy(template_path, destination_template)
-            print(f"Template copied to {destination_template}")
+            print(f"Template copied: {os.path.basename(template_path)} -> {upc}.btw")
         else:
-            print(f"Template not found at {template_path}")
+            print(f"No template found for {customer} - {label_size}")
     
     return {
         'job_folder_path': job_folder_path,
@@ -354,6 +355,7 @@ def generate_epc_preview_data(upc, start_serial, preview_count=10):
 def get_template_path(template_base_path, customer, label_size):
     """
     Get the template file path for a given customer and label size.
+    Updated to work with actual template structure: LabelSize/LabelSize InlayType Customer Template.btw
     
     Args:
         template_base_path (str): Base path for templates
@@ -363,10 +365,161 @@ def get_template_path(template_base_path, customer, label_size):
     Returns:
         str: Full path to template file, or None if not found
     """
-    template_path = os.path.join(template_base_path, customer, label_size, f"Template {label_size}.btw")
-    if os.path.exists(template_path):
-        return template_path
+    if not template_base_path or not os.path.exists(template_base_path):
+        return None
+    
+    # Look for label size directory (handle variations in spacing and case)
+    label_size_dir = os.path.join(template_base_path, label_size)
+    
+    if not os.path.exists(label_size_dir):
+        # Try to find label size directory with case-insensitive matching
+        try:
+            for item in os.listdir(template_base_path):
+                item_path = os.path.join(template_base_path, item)
+                if os.path.isdir(item_path) and item.lower().replace(' ', '') == label_size.lower().replace(' ', ''):
+                    label_size_dir = item_path
+                    break
+            else:
+                return None
+        except Exception:
+            return None
+    
+    if not os.path.exists(label_size_dir):
+        return None
+    
+    # Look for template files in the label size directory
+    try:
+        for filename in os.listdir(label_size_dir):
+            if filename.lower().endswith('.btw'):
+                # Check if the customer name is in the filename
+                if customer.lower() in filename.lower():
+                    return os.path.join(label_size_dir, filename)
+        
+        # If no customer-specific template found, return the first .btw file
+        for filename in os.listdir(label_size_dir):
+            if filename.lower().endswith('.btw'):
+                return os.path.join(label_size_dir, filename)
+                
+    except Exception:
+        pass
+    
     return None
+
+
+def get_template_path_with_inlay(template_base_path, customer, label_size, inlay_type=None):
+    """
+    Enhanced template lookup that considers inlay type for better matching.
+    
+    Args:
+        template_base_path (str): Base path for templates
+        customer (str): Customer name
+        label_size (str): Label size
+        inlay_type (str): Inlay type (optional)
+        
+    Returns:
+        str: Full path to template file, or None if not found
+    """
+    if not template_base_path or not os.path.exists(template_base_path):
+        return None
+    
+    # Look for label size directory (handle variations in spacing and case)
+    label_size_dir = os.path.join(template_base_path, label_size)
+    
+    if not os.path.exists(label_size_dir):
+        # Try to find label size directory with case-insensitive matching
+        try:
+            for item in os.listdir(template_base_path):
+                item_path = os.path.join(template_base_path, item)
+                if os.path.isdir(item_path) and item.lower().replace(' ', '') == label_size.lower().replace(' ', ''):
+                    label_size_dir = item_path
+                    break
+            else:
+                return None
+        except Exception:
+            return None
+    
+    if not os.path.exists(label_size_dir):
+        return None
+    
+    try:
+        template_files = [f for f in os.listdir(label_size_dir) if f.lower().endswith('.btw')]
+        
+        if not template_files:
+            return None
+        
+        # Scoring system for best template match
+        best_score = 0
+        best_template = None
+        
+        for filename in template_files:
+            score = 0
+            filename_lower = filename.lower()
+            
+            # Customer match (highest priority) - check for partial matches
+            customer_words = customer.lower().split()
+            for word in customer_words:
+                if len(word) > 2 and word in filename_lower:  # Skip very short words
+                    score += 100
+            
+            # Inlay type match (medium priority)
+            if inlay_type and inlay_type.lower() in filename_lower:
+                score += 50
+            
+            # Check for specific inlay type numbers that might be in filename
+            if inlay_type:
+                inlay_numbers = ''.join(filter(str.isdigit, inlay_type))
+                if inlay_numbers and inlay_numbers in filename:
+                    score += 25
+            
+            if score > best_score:
+                best_score = score
+                best_template = os.path.join(label_size_dir, filename)
+        
+        # If we found a template with any matching criteria, return it
+        if best_template:
+            return best_template
+        
+        # Otherwise, return the first template file as fallback
+        return os.path.join(label_size_dir, template_files[0])
+        
+    except Exception:
+        pass
+    
+    return None
+
+
+def list_available_templates(template_base_path):
+    """
+    List all available templates organized by label size.
+    
+    Args:
+        template_base_path (str): Base path for templates
+        
+    Returns:
+        dict: Dictionary with label sizes as keys and lists of template files as values
+    """
+    templates = {}
+    
+    if not template_base_path or not os.path.exists(template_base_path):
+        return templates
+    
+    try:
+        for item in os.listdir(template_base_path):
+            item_path = os.path.join(template_base_path, item)
+            if os.path.isdir(item_path):
+                template_files = []
+                try:
+                    for filename in os.listdir(item_path):
+                        if filename.lower().endswith('.btw'):
+                            template_files.append(filename)
+                    if template_files:
+                        templates[item] = template_files
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    
+    return templates
 
 
 def populate_customer_dropdown_from_templates(template_base_path):

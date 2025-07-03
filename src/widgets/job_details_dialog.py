@@ -577,10 +577,57 @@ class JobDetailsDialog(QDialog):
                 os.makedirs(label_size_path)
 
             os.makedirs(job_path, exist_ok=True)
+            
+            # Create print folder and copy template
+            print_folder_path = os.path.join(job_path, "print")
+            os.makedirs(print_folder_path, exist_ok=True)
+            self.copy_template_to_job(customer, label_size, print_folder_path)
+            
             QMessageBox.information(self, "Success", f"Job folder created:\n{job_path}")
             self.check_directories()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not create job folder: {e}")
+
+    def copy_template_to_job(self, customer, label_size, print_folder_path):
+        """Copy .btw template file to the job's print folder."""
+        try:
+            import src.config as config
+            import shutil
+            from src.utils.epc_conversion import get_template_path_with_inlay
+            
+            template_base_path = config.get_template_base_path()
+            
+            if not template_base_path or not os.path.exists(template_base_path):
+                print(f"Template base path not configured or doesn't exist: {template_base_path}")
+                return
+            
+            # Get inlay type for better template matching
+            inlay_type = self.job_data.get("Inlay Type", "")
+            
+            # Use enhanced template lookup with inlay type
+            template_path = get_template_path_with_inlay(template_base_path, customer, label_size, inlay_type)
+            
+            if template_path and os.path.exists(template_path):
+                # Determine destination filename priority: UPC > Job Ticket > PO Number
+                upc = self.job_data.get("UPC Number", "")
+                job_ticket = self.job_data.get("Job Ticket#", "")
+                po_num = self.job_data.get("PO#", "")
+                
+                if upc:
+                    destination_filename = f"{upc}.btw"
+                elif job_ticket:
+                    destination_filename = f"{job_ticket}.btw"
+                else:
+                    destination_filename = f"{po_num}.btw"
+                
+                destination_template = os.path.join(print_folder_path, destination_filename)
+                shutil.copy(template_path, destination_template)
+                print(f"Template copied: {os.path.basename(template_path)} -> {destination_filename}")
+            else:
+                print(f"No template found for {customer} - {label_size} (Inlay: {inlay_type})")
+                    
+        except Exception as e:
+            print(f"Error copying template: {e}")
 
     def regenerate_checklist(self):
         job_path = self.find_job_directory()
