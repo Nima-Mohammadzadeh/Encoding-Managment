@@ -1440,6 +1440,44 @@ class JobPageWidget(QWidget):
                 # Copy template for traditional structure
                 self.copy_template_to_job(job_data, customer, label_size, print_folder_path)
                 
+                # Calculate and store serial range for traditional jobs (for PDF generation)
+                try:
+                    base_qty = int(job_data.get("Quantity", "0"))
+                    manual_override = job_data.get("Manual Serial Override", False)
+                    
+                    if manual_override:
+                        start_serial = int(job_data.get("Serial Number", "1"))
+                        print(f"Traditional job using manual serial override: starting at {start_serial}")
+                    else:
+                        # Try centralized serial allocation for traditional jobs too
+                        try:
+                            from src.utils.serial_manager import allocate_serials_for_job
+                            start_serial, end_serial = allocate_serials_for_job(base_qty, job_data)
+                            print(f"Traditional job allocated serials {start_serial} - {end_serial}")
+                        except Exception as e:
+                            print(f"Warning: Centralized serial allocation failed for traditional job: {e}")
+                            start_serial = int(job_data.get("Serial Number", "1000"))
+                            end_serial = start_serial + base_qty - 1
+                            print(f"Traditional job fallback: using serials {start_serial} - {end_serial}")
+                    
+                    # For traditional jobs without buffers, end_serial is start + quantity - 1
+                    if manual_override or "end_serial" not in locals():
+                        end_serial = start_serial + base_qty - 1
+                    
+                    # Store serial range information for PDF generation
+                    job_data["Start"] = str(start_serial)
+                    job_data["End"] = str(end_serial)
+                    job_data["Serial Range Start"] = start_serial
+                    job_data["Serial Range End"] = end_serial
+                    
+                    print(f"Stored traditional job serial range: Start={start_serial}, End={end_serial}")
+                    
+                except Exception as e:
+                    print(f"Warning: Could not calculate serial range for traditional job: {e}")
+                    # Set default values for PDF generation
+                    job_data["Start"] = "1"
+                    job_data["End"] = job_data.get("Quantity", "1")
+                
                 print(f"Successfully created traditional job folder: {job_folder_path}")
 
                 # Continue with normal job creation flow
@@ -1529,6 +1567,15 @@ class JobPageWidget(QWidget):
                 # Calculate end serial for manual override
                 end_serial = start_serial + total_qty - 1
                 print(f"Manual override: using serials {start_serial} - {end_serial} for job {job_data.get('Ticket#', 'Unknown')}")
+            
+            # Store serial range information in job_data for PDF generation
+            job_data["Start"] = str(start_serial)
+            job_data["End"] = str(end_serial)
+            job_data["Serial Range Start"] = start_serial  # For internal use
+            job_data["Serial Range End"] = end_serial    # For internal use
+            job_data["Total Quantity with Buffers"] = total_qty
+            
+            print(f"Stored serial range in job data: Start={start_serial}, End={end_serial}")
             
             qty_per_db = int(job_data.get("Qty per DB", "1000"))
             upc = job_data.get("UPC Number", "")

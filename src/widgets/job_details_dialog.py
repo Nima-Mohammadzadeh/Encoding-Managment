@@ -1092,6 +1092,14 @@ class PDFGenerationWorker(QThread):
             
             self.progress_updated.emit(0, "Opening PDF template...")
             
+            # Debug: Log serial range information available for PDF generation
+            start_value = self.job_data.get("Start", "NOT_SET")
+            end_value = self.job_data.get("End", "NOT_SET")
+            print(f"=== PDF Generation Debug ===")
+            print(f"Available Start value: {start_value}")
+            print(f"Available End value: {end_value}")
+            print(f"Job data keys: {list(self.job_data.keys())}")
+            
             if self.is_cancelled:
                 return
                 
@@ -1159,6 +1167,26 @@ class PDFGenerationWorker(QThread):
                                     value = f"{upc_value[:3]} {upc_value[3:6]} {upc_value[6:9]} {upc_value[9:12]}"
                                 else:
                                     value = upc_value
+                            elif data_key == "Start":
+                                # Format start serial number with commas
+                                start_value = self.job_data.get("Start", "")
+                                if start_value and str(start_value).replace(',', '').isdigit():
+                                    clean_start = str(start_value).replace(',', '')
+                                    value = f"{int(clean_start):,}"
+                                    print(f"PDF: Set Start field to {value}")
+                                else:
+                                    value = str(start_value) if start_value else ""
+                                    print(f"PDF: Start field fallback value: {value}")
+                            elif data_key == "End":
+                                # Format end serial number with commas
+                                end_value = self.job_data.get("End", "")
+                                if end_value and str(end_value).replace(',', '').isdigit():
+                                    clean_end = str(end_value).replace(',', '')
+                                    value = f"{int(clean_end):,}"
+                                    print(f"PDF: Set End field to {value}")
+                                else:
+                                    value = str(end_value) if end_value else ""
+                                    print(f"PDF: End field fallback value: {value}")
                             else:
                                 value = self.job_data.get(data_key, "")
 
