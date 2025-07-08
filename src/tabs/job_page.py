@@ -1078,6 +1078,15 @@ class JobPageWidget(QWidget):
             # For now, we stick to the original logic.
             return
 
+        # Set archive date and status before sending to archive
+        from datetime import datetime
+        current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        job_data['dateArchived'] = current_timestamp
+        job_data['archivedDate'] = datetime.now().strftime('%Y-%m-%d')
+        job_data['Status'] = 'Archived'
+        
+        print(f"Moving job to archive with timestamp: {current_timestamp}")
+
         # Emit the job data to the archive page
         self.job_to_archive.emit(job_data)
 
@@ -1210,6 +1219,15 @@ class JobPageWidget(QWidget):
 
     def handle_job_archived(self, job_data):
         """Handle job being archived from details dialog"""
+        # Set archive date and status before sending to archive
+        from datetime import datetime
+        current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        job_data['dateArchived'] = current_timestamp
+        job_data['archivedDate'] = datetime.now().strftime('%Y-%m-%d')
+        job_data['Status'] = 'Archived'
+        
+        print(f"Archiving job from details dialog with timestamp: {current_timestamp}")
+        
         self.job_to_archive.emit(job_data)
 
         # Find the row and remove it, deleting files as part of the process
