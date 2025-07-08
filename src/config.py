@@ -50,6 +50,35 @@ SERIAL_NUMBERS_PATH_KEY = "paths/serial_numbers"
 DEFAULT_SERIAL_NUMBERS_PATH = os.path.join(BASE_PATH, "serial_numbers")  # Local directory for now
 SERIAL_NUMBERS_PATH = settings.value(SERIAL_NUMBERS_PATH_KEY, DEFAULT_SERIAL_NUMBERS_PATH)
 
+# --- Monitoring Performance Settings ---
+# These settings control how aggressively the application monitors directories for changes
+# Useful for optimizing performance in multi-user environments or with network drives
+
+# Enable/disable real-time file system monitoring
+ENABLE_FILE_MONITORING_KEY = "monitoring/enable_file_monitoring"
+DEFAULT_ENABLE_FILE_MONITORING = True
+ENABLE_FILE_MONITORING = settings.value(ENABLE_FILE_MONITORING_KEY, DEFAULT_ENABLE_FILE_MONITORING, type=bool)
+
+# Maximum number of directories to monitor simultaneously
+MAX_MONITORED_DIRECTORIES_KEY = "monitoring/max_directories"
+DEFAULT_MAX_MONITORED_DIRECTORIES = 50
+MAX_MONITORED_DIRECTORIES = settings.value(MAX_MONITORED_DIRECTORIES_KEY, DEFAULT_MAX_MONITORED_DIRECTORIES, type=int)
+
+# Maximum depth to monitor subdirectories
+MAX_MONITORING_DEPTH_KEY = "monitoring/max_depth"
+DEFAULT_MAX_MONITORING_DEPTH = 3
+MAX_MONITORING_DEPTH = settings.value(MAX_MONITORING_DEPTH_KEY, DEFAULT_MAX_MONITORING_DEPTH, type=int)
+
+# Refresh debounce timer (milliseconds) - how long to wait after changes before refreshing
+REFRESH_DEBOUNCE_MS_KEY = "monitoring/refresh_debounce_ms"
+DEFAULT_REFRESH_DEBOUNCE_MS = 500
+REFRESH_DEBOUNCE_MS = settings.value(REFRESH_DEBOUNCE_MS_KEY, DEFAULT_REFRESH_DEBOUNCE_MS, type=int)
+
+# Periodic refresh interval for network drives (milliseconds)
+PERIODIC_REFRESH_INTERVAL_KEY = "monitoring/periodic_refresh_interval"
+DEFAULT_PERIODIC_REFRESH_INTERVAL = 30000  # 30 seconds
+PERIODIC_REFRESH_INTERVAL = settings.value(PERIODIC_REFRESH_INTERVAL_KEY, DEFAULT_PERIODIC_REFRESH_INTERVAL, type=int)
+
 # --- TXT File Paths for Combobox Data ---
 # These are the .txt files that the job wizard reads from
 CUSTOMER_NAMES_FILE = os.path.join(BASE_PATH, "data", "Customer_names.txt")
@@ -119,3 +148,41 @@ def save_serial_numbers_path(path):
 def get_serial_numbers_path():
     """Get the current serial numbers path."""
     return SERIAL_NUMBERS_PATH
+
+
+def save_monitoring_settings(enable_monitoring=None, max_directories=None, max_depth=None, 
+                            debounce_ms=None, periodic_interval=None):
+    """Save monitoring performance settings."""
+    global ENABLE_FILE_MONITORING, MAX_MONITORED_DIRECTORIES, MAX_MONITORING_DEPTH
+    global REFRESH_DEBOUNCE_MS, PERIODIC_REFRESH_INTERVAL
+    
+    if enable_monitoring is not None:
+        settings.setValue(ENABLE_FILE_MONITORING_KEY, enable_monitoring)
+        ENABLE_FILE_MONITORING = enable_monitoring
+        
+    if max_directories is not None:
+        settings.setValue(MAX_MONITORED_DIRECTORIES_KEY, max_directories)
+        MAX_MONITORED_DIRECTORIES = max_directories
+        
+    if max_depth is not None:
+        settings.setValue(MAX_MONITORING_DEPTH_KEY, max_depth)
+        MAX_MONITORING_DEPTH = max_depth
+        
+    if debounce_ms is not None:
+        settings.setValue(REFRESH_DEBOUNCE_MS_KEY, debounce_ms)
+        REFRESH_DEBOUNCE_MS = debounce_ms
+        
+    if periodic_interval is not None:
+        settings.setValue(PERIODIC_REFRESH_INTERVAL_KEY, periodic_interval)
+        PERIODIC_REFRESH_INTERVAL = periodic_interval
+
+
+def get_monitoring_settings():
+    """Get current monitoring settings as a dictionary."""
+    return {
+        'enable_monitoring': ENABLE_FILE_MONITORING,
+        'max_directories': MAX_MONITORED_DIRECTORIES,
+        'max_depth': MAX_MONITORING_DEPTH,
+        'debounce_ms': REFRESH_DEBOUNCE_MS,
+        'periodic_interval': PERIODIC_REFRESH_INTERVAL
+    }

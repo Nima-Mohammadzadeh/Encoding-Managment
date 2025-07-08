@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QLabel,
+    QTextEdit,
 )
 import fitz
 import pymupdf, shutil, os, sys
@@ -38,6 +39,7 @@ from src.utils.epc_conversion import (
     validate_upc,
     calculate_total_quantity_with_percentages,
 )
+import re
 
 
 class JobPageWidget(QWidget):
@@ -64,8 +66,20 @@ class JobPageWidget(QWidget):
         actions_layout = QHBoxLayout()
         self.add_job_button = QPushButton("Add Job")
         self.add_job_button.clicked.connect(self.open_new_job_wizard)
+        
+        # Add manual refresh button
+        self.refresh_button = QPushButton("Refresh Jobs")
+        self.refresh_button.clicked.connect(self.manual_refresh_jobs)
+        self.refresh_button.setToolTip("Manually refresh the job list from disk")
+        
+        # Add debug button for troubleshooting (commented out for production)
+        # self.debug_button = QPushButton("Debug Info")
+        # self.debug_button.clicked.connect(self.show_debug_info)
 
         actions_layout.addWidget(self.add_job_button)
+        actions_layout.addWidget(self.refresh_button)
+        # actions_layout.addWidget(self.debug_button)
+        actions_layout.addStretch()
         layout.addLayout(actions_layout)
 
         self.model = QStandardItemModel()
@@ -134,14 +148,74 @@ class JobPageWidget(QWidget):
         self.jobs_table.doubleClicked.connect(self.open_job_details)
 
     def setup_directory_monitoring(self):
-        """Set up file system monitoring for the active jobs source directory."""
+        """Set up file system monitoring for the active jobs source directory with performance optimizations."""
         active_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
+        
+        # Check if monitoring is disabled in settings
+        if not config.ENABLE_FILE_MONITORING:
+            print("File system monitoring is DISABLED in settings")
+            print("Jobs will only refresh on application startup or manual refresh")
+            return
 
         # Ensure the directory exists
         if not os.path.exists(active_source_dir):
             os.makedirs(active_source_dir, exist_ok=True)
             print(f"Created active jobs source directory: {active_source_dir}")
 
+        # Performance optimization: Only monitor if it's a local directory
+        # Network drives (like Z:) can be unreliable and cause performance issues
+        if self.is_network_drive(active_source_dir):
+            print(f"WARNING: Monitoring network drive detected: {active_source_dir}")
+            print("Network drive monitoring may cause performance issues with multiple users.")
+            print("Consider using periodic refresh instead of real-time monitoring.")
+            
+            # For network drives, use less aggressive monitoring
+            self.setup_limited_network_monitoring(active_source_dir)
+        else:
+            # For local drives, use full monitoring
+            self.setup_full_local_monitoring(active_source_dir)
+
+    def is_network_drive(self, path):
+        """Check if the path is on a network drive."""
+        import os
+        if os.name == 'nt':  # Windows
+            drive = os.path.splitdrive(path)[0]
+            # Check if it's a mapped network drive (typically Z:, Y:, etc.)
+            if drive and len(drive) == 2 and drive[1] == ':':
+                return drive.upper() in ['Z:', 'Y:', 'X:', 'W:', 'V:', 'U:', 'T:', 'S:', 'R:', 'Q:', 'P:', 'O:', 'N:', 'M:', 'L:', 'K:', 'J:', 'I:', 'H:', 'G:', 'F:']
+            # UNC paths (\\server\share)
+            return path.startswith('\\\\')
+        return False
+
+    def setup_limited_network_monitoring(self, active_source_dir):
+        """Setup limited monitoring for network drives to avoid performance issues."""
+        print("Setting up LIMITED network monitoring (performance mode)")
+        
+        # Only monitor the root directory, not subdirectories
+        if active_source_dir not in self.file_watcher.directories():
+            success = self.file_watcher.addPath(active_source_dir)
+            if success:
+                print(f"Monitoring root directory only: {active_source_dir}")
+            else:
+                print(f"Failed to monitor: {active_source_dir}")
+        
+        # Use longer debounce timer for network drives (2x normal setting)
+        network_debounce = max(config.REFRESH_DEBOUNCE_MS * 2, 2000)
+        self.refresh_timer.setInterval(network_debounce)
+        print(f"Network debounce timer set to: {network_debounce}ms")
+        
+        # Schedule periodic refresh for network drives
+        if not hasattr(self, 'periodic_refresh_timer'):
+            from PySide6.QtCore import QTimer
+            self.periodic_refresh_timer = QTimer()
+            self.periodic_refresh_timer.timeout.connect(self.periodic_refresh)
+            self.periodic_refresh_timer.start(config.PERIODIC_REFRESH_INTERVAL)
+            print(f"Enabled periodic refresh every {config.PERIODIC_REFRESH_INTERVAL//1000} seconds for network drive")
+
+    def setup_full_local_monitoring(self, active_source_dir):
+        """Setup full monitoring for local drives."""
+        print("Setting up FULL local monitoring")
+        
         # Add the main directory to watcher
         if active_source_dir not in self.file_watcher.directories():
             success = self.file_watcher.addPath(active_source_dir)
@@ -150,36 +224,92 @@ class JobPageWidget(QWidget):
             else:
                 print(f"Failed to monitor: {active_source_dir}")
 
-        # Also monitor all subdirectories recursively
-        self.add_subdirectories_to_watcher(active_source_dir)
+        # Monitor subdirectories but with configured limits
+        self.add_subdirectories_to_watcher_limited(active_source_dir)
+        
+        # Use configured debounce timer for local drives
+        self.refresh_timer.setInterval(config.REFRESH_DEBOUNCE_MS)
+        print(f"Local debounce timer set to: {config.REFRESH_DEBOUNCE_MS}ms")
 
-        print(
-            f"Currently monitoring {len(self.file_watcher.directories())} directories"
-        )
-
-    def add_subdirectories_to_watcher(self, directory):
-        """Recursively add all subdirectories to the file system watcher."""
+    def add_subdirectories_to_watcher_limited(self, directory, max_depth=None, max_directories=None):
+        """Recursively add subdirectories with configurable limits to prevent performance issues."""
+        # Use configured limits or defaults
+        if max_depth is None:
+            max_depth = config.MAX_MONITORING_DEPTH
+        if max_directories is None:
+            max_directories = config.MAX_MONITORED_DIRECTORIES
+            
         try:
+            monitored_count = 0
             for root, dirs, files in os.walk(directory):
+                # Limit monitoring depth
+                depth = root.replace(directory, '').count(os.sep)
+                if depth >= max_depth:
+                    dirs[:] = []  # Don't recurse deeper
+                    continue
+                
+                # Limit total monitored directories
+                if monitored_count >= max_directories:
+                    print(f"Reached monitoring limit of {max_directories} directories (configurable)")
+                    break
+                
                 if root not in self.file_watcher.directories():
                     success = self.file_watcher.addPath(root)
                     if success:
-                        print(f"Added to monitoring: {root}")
+                        monitored_count += 1
+                        if monitored_count <= 10:  # Only log first 10 to avoid spam
+                            print(f"Added to monitoring: {root}")
+                        elif monitored_count == 11:
+                            print("... (additional directories added, logging suppressed)")
                     else:
                         print(f"Failed to add to monitoring: {root}")
+                        
         except Exception as e:
             print(f"Error adding subdirectories to watcher: {e}")
+        
+        print(f"Total directories being monitored: {len(self.file_watcher.directories())} (max: {max_directories})")
+
+    def manual_refresh_jobs(self):
+        """Manually refresh the jobs table - useful when monitoring is disabled or unreliable."""
+        print("=== Manual refresh triggered by user ===")
+        
+        # Show brief status message
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        
+        try:
+            old_count = len(self.all_jobs)
+            self.load_jobs()
+            new_count = len(self.all_jobs)
+            
+            print(f"Manual refresh complete: {old_count} -> {new_count} jobs")
+            
+            # Show brief feedback in status (if you have a status bar)
+            # For now, just log the result
+            if new_count != old_count:
+                print(f"Jobs updated: found {new_count} jobs (was {old_count})")
+            else:
+                print(f"No changes: {new_count} jobs found")
+                
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def periodic_refresh(self):
+        """Periodic refresh for network drives where file system watching is unreliable."""
+        print("Performing periodic refresh for network drive...")
+        self.refresh_jobs_table()
 
     def on_directory_changed(self, path):
         """Handle directory change events from the file system watcher."""
         print(f"Directory changed detected: {path}")
 
-        # Re-add any new subdirectories to the watcher
-        self.add_subdirectories_to_watcher(config.ACTIVE_JOBS_SOURCE_DIR)
+        # Re-add any new subdirectories to the watcher (only if not network drive)
+        if not self.is_network_drive(config.ACTIVE_JOBS_SOURCE_DIR):
+            self.add_subdirectories_to_watcher_limited(config.ACTIVE_JOBS_SOURCE_DIR)
 
-        # Use timer to debounce rapid changes (wait 500ms after last change)
-        self.refresh_timer.start(500)
-        print("Refresh timer started (500ms delay)")
+        # Use timer to debounce rapid changes - interval set during setup
+        self.refresh_timer.start()
+        print(f"Refresh timer started ({self.refresh_timer.interval()}ms delay)")
 
     def refresh_jobs_table(self):
         """Refresh the jobs table by reloading data from the file system."""
@@ -226,7 +356,59 @@ class JobPageWidget(QWidget):
 
         if wizard.exec():
             job_data = wizard.get_data()
-            # create_job_folder_and_checklist handles folder creation, json saving, and copying
+            
+            # Check for duplicates BEFORE creating any folders or files
+            is_duplicate, conflict_type, conflicting_job = self.check_for_duplicate_job(job_data)
+            
+            if is_duplicate:
+                # Show appropriate error message and abort job creation
+                customer = job_data.get("Customer", "")
+                po_number = job_data.get("PO#", "")
+                job_ticket = job_data.get("Ticket#", job_data.get("Job Ticket#", ""))
+                upc_number = job_data.get("UPC Number", "")
+                
+                if conflict_type == "ticket_duplicate":
+                    conflict_customer = conflicting_job.get("Customer", "")
+                    conflict_po = conflicting_job.get("PO#", "")
+                    conflict_ticket = conflicting_job.get("Ticket#", conflicting_job.get("Job Ticket#", ""))
+                    
+                    QMessageBox.warning(
+                        self, 
+                        "Duplicate Ticket Number",
+                        f"Cannot create job - a job with the same Ticket# already exists:\n\n"
+                        f"Your Job:\n"
+                        f"  Customer: {customer}\n"
+                        f"  Ticket#: {job_ticket}\n\n"
+                        f"Existing Job:\n"
+                        f"  Customer: {conflict_customer}\n"
+                        f"  PO#: {conflict_po}\n"
+                        f"  Ticket#: {conflict_ticket}\n\n"
+                        f"Ticket numbers must be unique. Please use a different ticket number."
+                    )
+                elif conflict_type == "upc_conflict":
+                    conflict_customer = conflicting_job.get("Customer", "")
+                    conflict_po = conflicting_job.get("PO#", "")
+                    conflict_ticket = conflicting_job.get("Ticket#", conflicting_job.get("Job Ticket#", ""))
+                    
+                    QMessageBox.warning(
+                        self,
+                        "UPC Number Conflict",
+                        f"Cannot create job - the UPC number '{upc_number}' is already in use:\n\n"
+                        f"Your Job:\n"
+                        f"  Customer: {customer}\n"
+                        f"  UPC: {upc_number}\n\n"
+                        f"Existing Job:\n"
+                        f"  Customer: {conflict_customer}\n"
+                        f"  PO#: {conflict_po}\n"
+                        f"  Ticket#: {conflict_ticket}\n\n"
+                        f"Please use a different UPC number."
+                    )
+                
+                print(f"Job creation aborted - {conflict_type} detected")
+                return  # Exit without creating the job
+            
+            # No duplicates detected - proceed with job creation
+            print(f"No duplicates found - proceeding with job creation")
             job_created = self.create_job_folder_and_checklist(job_data)
 
             if job_created:
@@ -240,23 +422,97 @@ class JobPageWidget(QWidget):
         else:
             print("job not created")
 
+    def check_for_duplicate_job(self, job_data):
+        """
+        Check if the job data represents a duplicate of an existing job.
+        Returns (is_duplicate, conflict_type, conflicting_job) tuple.
+        
+        Duplicate logic:
+        1. Same Ticket# = TRUE DUPLICATE (not allowed) - ticket numbers must be unique
+        2. Same UPC Number (if provided) = UPC CONFLICT (not allowed)
+        3. Same PO# + Different Ticket# = ALLOWED (multiple tickets can share PO#)
+        """
+        customer = job_data.get("Customer", "").strip()
+        po_number = job_data.get("PO#", "").strip()
+        upc_number = job_data.get("UPC Number", "").strip()
+        job_ticket = job_data.get("Ticket#", job_data.get("Job Ticket#", "")).strip()
+        
+        # Skip empty ticket numbers for meaningful duplicate detection
+        if not job_ticket:
+            return False, None, None
+        
+        for existing_job in self.all_jobs:
+            existing_customer = existing_job.get("Customer", "").strip()
+            existing_po = existing_job.get("PO#", "").strip()
+            existing_upc = existing_job.get("UPC Number", "").strip()
+            existing_ticket = existing_job.get("Ticket#", existing_job.get("Job Ticket#", "")).strip()
+            
+            # Check for exact ticket number match (primary duplicate check)
+            if job_ticket and existing_ticket and job_ticket == existing_ticket:
+                return True, "ticket_duplicate", existing_job
+            
+            # Check for UPC conflict (if both have UPC numbers)
+            if (upc_number and existing_upc and 
+                upc_number == existing_upc):
+                return True, "upc_conflict", existing_job
+        
+        return False, None, None
+
     def add_job_to_table(self, job_data):
-        # This function will now just handle the view
-        # Check for duplicates using unique identifiers (Ticket# and PO#)
+        """Add job to table with comprehensive duplicate checking."""
         job_ticket = job_data.get("Ticket#", job_data.get("Job Ticket#", ""))
         po_number = job_data.get("PO#", "")
+        customer = job_data.get("Customer", "")
+        upc_number = job_data.get("UPC Number", "")
+        
+        print(f"=== Attempting to add job to table ===")
+        print(f"  Customer: {customer}")
+        print(f"  Ticket#: {job_ticket}")
+        print(f"  PO#: {po_number}")
+        print(f"  UPC: {upc_number}")
+        print(f"  Current table size: {len(self.all_jobs)} jobs")
 
-        # Check if this job already exists in our list
-        for existing_job in self.all_jobs:
-            existing_ticket = existing_job.get(
-                "Ticket#", existing_job.get("Job Ticket#", "")
-            )
-            existing_po = existing_job.get("PO#", "")
-            if existing_ticket == job_ticket and existing_po == po_number:
-                print(
-                    f"Duplicate job detected and skipped: Ticket#{job_ticket}, PO#{po_number}"
+        # Check for duplicates using the new comprehensive method
+        is_duplicate, conflict_type, conflicting_job = self.check_for_duplicate_job(job_data)
+        
+        if is_duplicate:
+            conflict_customer = conflicting_job.get("Customer", "")
+            conflict_po = conflicting_job.get("PO#", "")
+            conflict_ticket = conflicting_job.get("Ticket#", conflicting_job.get("Job Ticket#", ""))
+            conflict_upc = conflicting_job.get("UPC Number", "")
+            
+            if conflict_type == "ticket_duplicate":
+                print(f"DUPLICATE REJECTED: Ticket# {job_ticket} already exists")
+                print(f"  Existing job: {conflict_customer} - PO#{conflict_po} - Ticket#{conflict_ticket}")
+                QMessageBox.warning(
+                    self, 
+                    "Duplicate Ticket Number",
+                    f"A job with the same Ticket# already exists:\n\n"
+                    f"Existing Job:\n"
+                    f"  Customer: {conflict_customer}\n"
+                    f"  PO#: {conflict_po}\n"
+                    f"  Ticket#: {conflict_ticket}\n\n"
+                    f"Ticket numbers must be unique. Please use a different ticket number."
                 )
-                return  # Skip adding this duplicate
+                return False  # Indicate failure
+            
+            elif conflict_type == "upc_conflict":
+                print(f"UPC CONFLICT REJECTED: UPC {upc_number} already in use")
+                print(f"  Existing job: {conflict_customer} - PO#{conflict_po} - Ticket#{conflict_ticket}")
+                QMessageBox.warning(
+                    self,
+                    "UPC Number Conflict",
+                    f"The UPC number '{upc_number}' is already in use by another job:\n\n"
+                    f"Existing Job:\n"
+                    f"  Customer: {conflict_customer}\n"
+                    f"  PO#: {conflict_po}\n"
+                    f"  Ticket#: {conflict_ticket}\n\n"
+                    f"Each UPC number must be unique. Please use a different UPC number."
+                )
+                return False  # Indicate failure
+        
+        # If we get here, it's not a duplicate - proceed with adding
+        print(f"  No conflicts found - proceeding to add job")
 
         # Format the due date to mm/dd/yyyy
         due_date_formatted = self.format_date_for_display(job_data.get("Due Date", ""))
@@ -282,7 +538,9 @@ class JobPageWidget(QWidget):
         self.model.appendRow(row_items)
         # Add the full job data to our source of truth list
         self.all_jobs.append(job_data)
-        print(f"Added job to table: Ticket#{job_ticket}, PO#{po_number}")
+        print(f"SUCCESS: Added job to table - Customer: {customer}, PO#: {po_number}, Ticket#: {job_ticket}")
+        print(f"Table now contains {len(self.all_jobs)} jobs")
+        return True  # Indicate success
 
     def format_date_for_display(self, date_string):
         """Convert date from ISO format (yyyy-mm-dd) to mm/dd/yyyy format."""
@@ -1335,6 +1593,54 @@ class JobPageWidget(QWidget):
     def finalize_job_creation(self, job_data, job_folder_path):
         """Complete the job creation process after EPC generation (if any) is done."""
         try:
+            # Check for duplicates BEFORE finalizing the job creation
+            is_duplicate, conflict_type, conflicting_job = self.check_for_duplicate_job(job_data)
+            
+            if is_duplicate:
+                # Duplicate detected - clean up any created folders and abort
+                if os.path.exists(job_folder_path):
+                    print(f"Duplicate detected - cleaning up folder: {job_folder_path}")
+                    import shutil
+                    try:
+                        shutil.rmtree(job_folder_path)
+                        print(f"Successfully cleaned up duplicate job folder")
+                    except Exception as e:
+                        print(f"Warning: Could not clean up folder {job_folder_path}: {e}")
+                
+                # Show appropriate error message based on conflict type
+                if conflict_type == "ticket_duplicate":
+                    conflict_customer = conflicting_job.get("Customer", "")
+                    conflict_po = conflicting_job.get("PO#", "")
+                    conflict_ticket = conflicting_job.get("Ticket#", conflicting_job.get("Job Ticket#", ""))
+                    
+                    QMessageBox.warning(
+                        self, 
+                        "Duplicate Ticket Number - Creation Cancelled",
+                        f"Job creation was cancelled because a job with the same Ticket# already exists:\n\n"
+                        f"Existing Job:\n"
+                        f"  Customer: {conflict_customer}\n"
+                        f"  PO#: {conflict_po}\n"
+                        f"  Ticket#: {conflict_ticket}\n\n"
+                        f"Ticket numbers must be unique. Please use a different ticket number."
+                    )
+                elif conflict_type == "upc_conflict":
+                    conflict_upc = conflicting_job.get("UPC Number", "")
+                    conflict_customer = conflicting_job.get("Customer", "")
+                    conflict_po = conflicting_job.get("PO#", "")
+                    
+                    QMessageBox.warning(
+                        self,
+                        "UPC Conflict - Creation Cancelled", 
+                        f"Job creation was cancelled because the UPC number '{conflict_upc}' is already in use:\n\n"
+                        f"Existing Job:\n"
+                        f"  Customer: {conflict_customer}\n"
+                        f"  PO#: {conflict_po}\n\n"
+                        f"Please use a different UPC number for this job."
+                    )
+                
+                return False  # Indicate failure
+            
+            # No duplicates - proceed with job creation
             # Save job data to JSON file
             job_data_path = os.path.join(job_folder_path, "job_data.json")
             try:
@@ -1350,6 +1656,11 @@ class JobPageWidget(QWidget):
 
             # Copy to active jobs source directory
             self.copy_to_active_jobs_source(job_data, job_folder_path)
+
+            # Try to add the job to the table - this should succeed since we checked for duplicates
+            add_success = self.add_job_to_table(job_data)
+            if not add_success:
+                print("Warning: Job creation completed but failed to add to table (unexpected)")
 
             # Ensure new directories are being monitored
             self.ensure_directory_monitoring()
@@ -1376,6 +1687,9 @@ class JobPageWidget(QWidget):
             os.makedirs(source_dest_path, exist_ok=True)
 
             destination_path = os.path.join(source_dest_path, final_folder_name)
+            
+            # Update job data with the expected active source path
+            job_data["active_source_folder_path"] = destination_path
             
             # Check if destination already exists
             if os.path.exists(destination_path):
@@ -1414,6 +1728,9 @@ class JobPageWidget(QWidget):
         """Handle completion of copy operation."""
         if success:
             print(f"Successfully copied job folder to: {destination_path}")
+            # Trigger a refresh to ensure the job appears in the table
+            # This is a safety net in case the file system watcher didn't catch it
+            self.refresh_timer.start(100)  # Quick refresh after copy completes
         else:
             QMessageBox.warning(
                 self,
@@ -1686,6 +2003,89 @@ class JobPageWidget(QWidget):
         
         # Refresh monitoring
         self.ensure_directory_monitoring()
+
+    def show_debug_info(self):
+        """Show debug information about the current state of jobs."""
+        debug_info = []
+        debug_info.append("=== JOB TABLE DEBUG INFO ===")
+        debug_info.append(f"Jobs in memory (all_jobs): {len(self.all_jobs)}")
+        debug_info.append(f"Rows in table model: {self.model.rowCount()}")
+        debug_info.append(f"Active jobs source dir: {config.ACTIVE_JOBS_SOURCE_DIR}")
+        debug_info.append(f"Monitored directories: {len(self.file_watcher.directories())}")
+        
+        # Count actual job folders on disk
+        disk_job_count = 0
+        if os.path.exists(config.ACTIVE_JOBS_SOURCE_DIR):
+            for root, _, files in os.walk(config.ACTIVE_JOBS_SOURCE_DIR):
+                if "job_data.json" in files:
+                    disk_job_count += 1
+        debug_info.append(f"Job folders on disk: {disk_job_count}")
+        
+        # List jobs in memory with duplicate detection details
+        debug_info.append("\nJobs in memory (with duplicate detection keys):")
+        for i, job in enumerate(self.all_jobs):
+            customer = job.get("Customer", "")
+            ticket = job.get("Ticket#", job.get("Job Ticket#", ""))
+            po = job.get("PO#", "")
+            upc = job.get("UPC Number", "")
+            debug_info.append(f"  {i+1}. Customer: '{customer}' | PO#: '{po}' | Ticket#: '{ticket}' | UPC: '{upc}'")
+        
+        # Show duplicate detection matrix
+        debug_info.append("\nDuplicate Detection Analysis:")
+        ticket_numbers = {}
+        upc_numbers = {}
+        
+        for i, job in enumerate(self.all_jobs):
+            customer = job.get("Customer", "").strip()
+            po = job.get("PO#", "").strip()
+            upc = job.get("UPC Number", "").strip()
+            ticket = job.get("Ticket#", job.get("Job Ticket#", "")).strip()
+            
+            # Track Ticket numbers (primary duplicate check)
+            if ticket:
+                if ticket in ticket_numbers:
+                    ticket_numbers[ticket].append(i+1)
+                else:
+                    ticket_numbers[ticket] = [i+1]
+            
+            # Track UPC numbers
+            if upc:
+                if upc in upc_numbers:
+                    upc_numbers[upc].append(i+1)
+                else:
+                    upc_numbers[upc] = [i+1]
+        
+        # Report potential duplicates
+        duplicates_found = False
+        for ticket, job_indices in ticket_numbers.items():
+            if len(job_indices) > 1:
+                debug_info.append(f"  DUPLICATE Ticket#: {ticket} (Jobs: {job_indices})")
+                duplicates_found = True
+        
+        for upc, job_indices in upc_numbers.items():
+            if len(job_indices) > 1:
+                debug_info.append(f"  DUPLICATE UPC: {upc} (Jobs: {job_indices})")
+                duplicates_found = True
+        
+        if not duplicates_found:
+            debug_info.append("  No duplicates detected.")
+        
+        # Show the info in a message box
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Debug Information")
+        dialog.setMinimumSize(700, 500)
+        
+        layout = QVBoxLayout(dialog)
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText("\n".join(debug_info))
+        layout.addWidget(text_edit)
+        
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        layout.addWidget(close_button)
+        
+        dialog.exec()
 
     def get_job_data_value(self, job_data, new_key, old_key=None):
         """Helper to get value from job_data, trying new key first then old key."""
