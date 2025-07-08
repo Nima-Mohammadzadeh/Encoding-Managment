@@ -1121,6 +1121,9 @@ class PDFGenerationWorker(QThread):
                 "Date": "Date",
             }
             
+            # Additional possible field names for ending serial
+            end_field_variations = ["end", "stop", "finish", "last", "final", "ending", "End", "Stop", "STOP", "END"]
+            
             self.progress_updated.emit(20, "Loading PDF document...")
             doc = fitz.open(self.template_path)
             
@@ -1133,6 +1136,27 @@ class PDFGenerationWorker(QThread):
             
             self.progress_updated.emit(40, "Processing form fields...")
             
+            # Debug: Scan all available PDF field names
+            print(f"=== Available PDF Fields ===")
+            all_pdf_fields = []
+            for page in doc:
+                for widget in page.widgets():
+                    if widget.field_name:
+                        all_pdf_fields.append(widget.field_name)
+            
+            unique_fields = list(set(all_pdf_fields))
+            unique_fields.sort()
+            print(f"All PDF field names found: {unique_fields}")
+            
+            # Look for ending serial field variations
+            ending_field_candidates = []
+            for field_name in unique_fields:
+                field_lower = field_name.lower()
+                if any(term in field_lower for term in ['end', 'stop', 'finish', 'last', 'final']):
+                    ending_field_candidates.append(field_name)
+            
+            print(f"Potential ending serial fields: {ending_field_candidates}")
+            
             for page in doc:
                 if self.is_cancelled:
                     break
@@ -1141,6 +1165,8 @@ class PDFGenerationWorker(QThread):
                     if self.is_cancelled:
                         break
                         
+                    # First, try the standard field mappings
+                    field_handled = False
                     for data_key, pdf_key in fields_to_fill.items():
                         if widget.field_name == pdf_key:
                             value = ""
@@ -1196,12 +1222,44 @@ class PDFGenerationWorker(QThread):
                             filled_fields += 1
                             progress = 40 + int((filled_fields / total_fields) * 40)
                             self.progress_updated.emit(progress, f"Filled field: {data_key}")
+                            field_handled = True
                             break
-            
+                    
+                    # If not handled by standard mappings, check for ending serial field variations
+                    if not field_handled and widget.field_name in end_field_variations:
+                        # This is likely an ending serial field
+                        end_value = self.job_data.get("End", "")
+                        if end_value and str(end_value).replace(',', '').isdigit():
+                            clean_end = str(end_value).replace(',', '')
+                            value = f"{int(clean_end):,}"
+                            print(f"PDF: Set {widget.field_name} field (ending serial variation) to {value}")
+                        else:
+                            value = str(end_value) if end_value else ""
+                            print(f"PDF: {widget.field_name} field (ending serial variation) fallback value: {value}")
+                        
+                        widget.field_value = str(value)
+                        widget.update()
+                        filled_fields += 1
+                        progress = 40 + int((filled_fields / total_fields) * 40)
+                        self.progress_updated.emit(progress, f"Filled ending serial field: {widget.field_name}")
+                        field_handled = True
+
             if not self.is_cancelled:
                 self.progress_updated.emit(90, "Saving PDF document...")
                 doc.save(self.output_path, garbage=4, deflate=True)
                 doc.close()
+                
+                # Debug: Summary of field filling results
+                print(f"=== PDF Field Filling Summary ===")
+                print(f"Total fields attempted: {total_fields}")
+                print(f"Fields successfully filled: {filled_fields}")
+                
+                # Check if End field was filled
+                end_value = self.job_data.get("End", "NOT_SET")
+                if end_value != "NOT_SET":
+                    print(f"✅ End serial data available: {end_value}")
+                else:
+                    print(f"❌ End serial data NOT available in job_data")
                 
                 self.progress_updated.emit(100, "PDF generation completed")
                 self.generation_complete.emit(self.output_path)
