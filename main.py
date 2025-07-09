@@ -28,6 +28,7 @@ from src.tabs.dashboard_page import DashboardPageWidget
 from src.tabs.reports_page import ReportsPageWidget
 from src.tabs.tools_page import ToolsPageWidget
 import src.config as config
+from src.utils.file_utils import resource_path
 
 
 class CollapsibleNavButton(QPushButton):
@@ -114,7 +115,7 @@ class CollapsibleNavigationPanel(QWidget):
         
         # Collapse button
         self.collapse_btn = QPushButton()
-        collapse_icon_path = os.path.join("src", "icons", "collapse_nav_btn.png")
+        collapse_icon_path = resource_path(os.path.join("src", "icons", "collapse_nav_btn.png"))
         if os.path.exists(collapse_icon_path):
             self.collapse_btn.setIcon(QIcon(collapse_icon_path))
         else:
@@ -140,7 +141,7 @@ class CollapsibleNavigationPanel(QWidget):
         self.update_logo()
 
     def add_nav_button(self, text, icon_name):
-        icon_path = os.path.join("src", "icons", icon_name)
+        icon_path = resource_path(os.path.join("src", "icons", icon_name))
         button = CollapsibleNavButton(text, icon_path)
         
         self.nav_buttons.append(button)
@@ -191,7 +192,7 @@ class CollapsibleNavigationPanel(QWidget):
                 pass
 
     def update_logo(self):
-        logo_path = os.path.join("src", "icons", "logo.png")
+        logo_path = resource_path(os.path.join("src", "icons", "logo.png"))
         
         if self.is_collapsed:
             size = 45
@@ -288,6 +289,8 @@ class MainWindow(QMainWindow):
         # Connect other signals
         self.jobs_page.job_to_archive.connect(self.archive_page.add_archived_job)
         self.settings_page.active_jobs_source_changed.connect(self.jobs_page.update_active_jobs_source_directory)
+        self.settings_page.active_jobs_source_changed.connect(self.dashboard_page.update_source_directories)
+        self.archive_page.job_was_archived.connect(self.dashboard_page.refresh_dashboard)
         
         # Connect dashboard signals
         self.dashboard_page.navigate_to_jobs.connect(lambda: self.switch_page(1))

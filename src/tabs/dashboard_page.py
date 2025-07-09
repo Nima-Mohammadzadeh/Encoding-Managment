@@ -234,6 +234,16 @@ class DashboardPageWidget(QWidget):
         self.refresh_timer.timeout.connect(self.refresh_dashboard)
         self.refresh_timer.start(30000)  # 30 seconds
     
+    def update_source_directories(self):
+        """
+        Public method to update the source directories from the config and
+        trigger a dashboard refresh.
+        """
+        print("Dashboard: Updating source directories...")
+        self.active_jobs_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
+        self.archive_dir = config.ARCHIVE_DIR
+        self.refresh_dashboard()
+
     def setup_ui(self):
         """Setup the dashboard UI layout."""
         # Main layout for the widget

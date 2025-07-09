@@ -1,0 +1,71 @@
+('C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+ 'Managment\\build\\encoding_manager\\Encoding Manager.pkg',
+ {'BINARY': True,
+  'DATA': True,
+  'EXECUTABLE': True,
+  'EXTENSION': True,
+  'PYMODULE': True,
+  'PYSOURCE': True,
+  'PYZ': False,
+  'SPLASH': True,
+  'SYMLINK': False},
+ [('pyi-contents-directory _internal', '', 'OPTION'),
+  ('PYZ-00.pyz',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\build\\encoding_manager\\PYZ-00.pyz',
+   'PYZ'),
+  ('struct',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\build\\encoding_manager\\localpycs\\struct.pyc',
+   'PYMODULE'),
+  ('pyimod01_archive',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\build\\encoding_manager\\localpycs\\pyimod01_archive.pyc',
+   'PYMODULE'),
+  ('pyimod02_importers',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\build\\encoding_manager\\localpycs\\pyimod02_importers.pyc',
+   'PYMODULE'),
+  ('pyimod03_ctypes',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\build\\encoding_manager\\localpycs\\pyimod03_ctypes.pyc',
+   'PYMODULE'),
+  ('pyimod04_pywin32',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\build\\encoding_manager\\localpycs\\pyimod04_pywin32.pyc',
+   'PYMODULE'),
+  ('pyiboot01_bootstrap',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
+   'PYSOURCE'),
+  ('pyi_rth_pyside6',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_pyside6.py',
+   'PYSOURCE'),
+  ('pyi_rth_inspect',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_inspect.py',
+   'PYSOURCE'),
+  ('pyi_rth_pkgres',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_pkgres.py',
+   'PYSOURCE'),
+  ('pyi_rth_multiprocessing',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_multiprocessing.py',
+   'PYSOURCE'),
+  ('pyi_rth_pkgutil',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_pkgutil.py',
+   'PYSOURCE'),
+  ('main',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding Managment\\main.py',
+   'PYSOURCE')],
+ 'python310.dll',
+ True,
+ False,
+ False,
+ [],
+ None,
+ None,
+ None)

@@ -27,9 +27,11 @@ from src.widgets.job_details_dialog import JobDetailsDialog, FileOperationProgre
 import src.config as config
 
 from PySide6.QtGui import QStandardItem, QStandardItemModel, QFont, QIcon
-from PySide6.QtCore import Qt, QDate, QTimer
+from PySide6.QtCore import Qt, QDate, QTimer, Signal
 
 class ArchivePageWidget(QWidget):
+    job_was_archived = Signal()
+
     def __init__(self, base_path):
         super().__init__()
         self.base_path = base_path
@@ -509,6 +511,9 @@ class ArchivePageWidget(QWidget):
                 self.update_ui_after_load()
                 
                 QMessageBox.information(self, "Success", f"Job archived successfully:\n{destination_path}")
+                
+                # Emit the signal to notify other parts of the app (like the dashboard)
+                self.job_was_archived.emit()
                 
             except Exception as e:
                 print(f"Error updating archive metadata: {e}")

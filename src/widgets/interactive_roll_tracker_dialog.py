@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QPalette, QIcon
 from src.utils.epc_conversion import generate_epc
+from src.utils.file_utils import resource_path
 
 class InteractiveRollTrackerDialog(QDialog):
     """Interactive Roll Tracker - A standalone window for tracking roll completion progress."""
@@ -140,7 +141,7 @@ class InteractiveRollTrackerDialog(QDialog):
         """Load printer names."""
         self.printers = ["Select Printer"]
         try:
-            printer_file = os.path.join("data", "Printers.txt")
+            printer_file = resource_path(os.path.join("data", "Printers.txt"))
             if os.path.exists(printer_file):
                 with open(printer_file, 'r') as f:
                     self.printers.extend([line.strip() for line in f if line.strip()])
@@ -481,7 +482,7 @@ class InteractiveRollTrackerDialog(QDialog):
             action_btn.clicked.connect(lambda: self.start_roll(roll_info, roll_frame))
         elif status == 'Running':
             action_btn = QPushButton()
-            pause_icon_path = os.path.join("src", "icons", "pause.png")
+            pause_icon_path = resource_path(os.path.join("src", "icons", "pause.png"))
             if os.path.exists(pause_icon_path):
                 action_btn.setIcon(QIcon(pause_icon_path))
                 action_btn.setToolTip("Pause Roll")
@@ -502,7 +503,7 @@ class InteractiveRollTrackerDialog(QDialog):
             action_btn.clicked.connect(lambda: self.pause_roll(roll_info, roll_frame))
         elif status == 'Paused':
             action_btn = QPushButton()
-            resume_icon_path = os.path.join("src", "icons", "resume.png")
+            resume_icon_path = resource_path(os.path.join("src", "icons", "resume.png"))
             if os.path.exists(resume_icon_path):
                 action_btn.setIcon(QIcon(resume_icon_path))
                 action_btn.setToolTip("Resume Roll")
@@ -523,7 +524,7 @@ class InteractiveRollTrackerDialog(QDialog):
             action_btn.clicked.connect(lambda: self.resume_roll(roll_info, roll_frame))
         else:  # Completed - show check icon
             action_btn = QPushButton()
-            check_icon_path = os.path.join("src", "icons", "check.png")
+            check_icon_path = resource_path(os.path.join("src", "icons", "check.png"))
             if os.path.exists(check_icon_path):
                 action_btn.setIcon(QIcon(check_icon_path))
             else:
@@ -546,7 +547,7 @@ class InteractiveRollTrackerDialog(QDialog):
         # Complete button (only if running or paused) - using stop icon
         if status in ['Running', 'Paused']:
             complete_btn = QPushButton()
-            stop_icon_path = os.path.join("src", "icons", "stop.png")
+            stop_icon_path = resource_path(os.path.join("src", "icons", "stop.png"))
             if os.path.exists(stop_icon_path):
                 complete_btn.setIcon(QIcon(stop_icon_path))
                 complete_btn.setToolTip("Finish Roll")
@@ -569,7 +570,7 @@ class InteractiveRollTrackerDialog(QDialog):
         
         # Notes button (always visible) - using PNG icon
         notes_btn = QPushButton()
-        notes_icon_path = os.path.join("src", "icons", "note.png")
+        notes_icon_path = resource_path(os.path.join("src", "icons", "note.png"))
         if os.path.exists(notes_icon_path):
             notes_btn.setIcon(QIcon(notes_icon_path))
         else:
