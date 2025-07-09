@@ -9,6 +9,9 @@ import os
 from src.widgets.database_generator_dialog import DatabaseGeneratorDialog
 from src.widgets.checklist_generator_dialog import ChecklistGeneratorDialog
 from src.widgets.roll_tracker_dialog import RollTrackerDialog
+from src.widgets.upc_validator_dialog import UPCValidatorDialog
+from src.widgets.epc_validator_dialog import EPCValidatorDialog
+from src.widgets.global_search_dialog import GlobalSearchDialog
 
 
 class ToolCard(QFrame):
@@ -267,14 +270,17 @@ class ToolsPageWidget(QWidget):
     def open_upc_validator(self):
         """Open the UPC Validator tool"""
         print("Opening UPC Validator...")
-        self.show_tool_placeholder("UPC Validator")
+        dialog = UPCValidatorDialog(self)
+        dialog.exec()
         
     def open_epc_validator(self):
         """Open the EPC Validator tool"""
         print("Opening EPC Validator...")
-        self.show_tool_placeholder("EPC Validator")
+        dialog = EPCValidatorDialog(self)
+        dialog.exec()
         
     def open_global_search(self):
         """Open the Global Search tool"""
         print("Opening Global Search...")
-        self.show_tool_placeholder("Global Search") 
+        dialog = GlobalSearchDialog(self)
+        dialog.exec() 

@@ -96,7 +96,8 @@ class ArchivePageWidget(QWidget):
         search_row.addWidget(self.search_input)
         
         self.clear_search_btn = QPushButton("Clear")
-        self.clear_search_btn.setMaximumWidth(60)
+        self.clear_search_btn.setMinimumWidth(80)  # Increased width to fit text properly
+        self.clear_search_btn.setMaximumWidth(80)  # Set both min and max for consistent sizing
         self.clear_search_btn.clicked.connect(self.clear_search)
         search_row.addWidget(self.clear_search_btn)
         
@@ -119,9 +120,10 @@ class ArchivePageWidget(QWidget):
         # quick_filter_layout.addWidget(self.status_filter)
         
         # Advanced filters toggle
-        self.show_advanced_btn = QPushButton("Show Date Filters")
+        self.show_advanced_btn = QPushButton("Date Filters")  # Shortened from "Show Date Filters"
         self.show_advanced_btn.setCheckable(True)
-        self.show_advanced_btn.setMaximumWidth(130)
+        self.show_advanced_btn.setMinimumWidth(120)  # Increased width to properly fit text content
+        self.show_advanced_btn.setMaximumWidth(120)  # Set consistent sizing
         self.show_advanced_btn.clicked.connect(self.toggle_advanced_filters)
         quick_filter_layout.addWidget(self.show_advanced_btn)
         
@@ -225,7 +227,8 @@ class ArchivePageWidget(QWidget):
         """Toggle visibility of advanced date filters."""
         is_visible = self.advanced_filters_frame.isVisible()
         self.advanced_filters_frame.setVisible(not is_visible)
-        self.show_advanced_btn.setText("Hide Date Filters" if not is_visible else "Show Date Filters")
+        # Updated button text to be shorter and fit within button width
+        self.show_advanced_btn.setText("Hide Filters" if not is_visible else "Date Filters")
 
     def reset_date_filters(self):
         """Reset date filters to default range."""

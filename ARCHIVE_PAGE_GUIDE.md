@@ -29,11 +29,11 @@ The Archive Page has been completely refined to provide a seamless, easy-to-use 
 
 ### 🎯 **Quick Filters**
 - **Customer Filter**: Dropdown populated with all unique customers from archived jobs
-- **Clear Button**: Instantly clear search and reset all filters
+- **Clear Button**: Instantly clear search and reset all filters (improved sizing for better readability)
 - **Removed**: Status filter (no longer needed since all archived jobs have archived status)
 
 ### 📅 **Advanced Date Filters (Optional)**
-- **Toggle Button**: "Show Date Filters" / "Hide Date Filters"
+- **Toggle Button**: "Date Filters" / "Hide Filters" (optimized width for complete text visibility)
 - **Date Range**: Filter by archive date range (from/to)
 - **Reset Button**: Reset dates to default range (last year to today)
 - **Smart Design**: Date filters only apply when the advanced section is visible
@@ -68,11 +68,11 @@ The Archive Page has been completely refined to provide a seamless, easy-to-use 
 3. Use date filters for time-based searches
 
 ### Advanced Date Filtering
-1. Click "Show Date Filters" button
+1. Click "Date Filters" button to show the date range controls
 2. Set your desired date range using the calendar pickers
 3. Results will filter to only show jobs archived in that date range
 4. Click "Reset Dates" to return to default range
-5. Click "Hide Date Filters" to disable date filtering
+5. Click "Hide Filters" to hide and disable date filtering
 
 ### Viewing Job Details
 1. **Double-click** any job row to open detailed view
