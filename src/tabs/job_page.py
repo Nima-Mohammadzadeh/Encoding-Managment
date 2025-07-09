@@ -39,6 +39,7 @@ from src.utils.epc_conversion import (
     validate_upc,
     calculate_total_quantity_with_percentages,
 )
+from src.utils.roll_tracker import generate_quality_control_sheet
 import re
 
 
@@ -1123,6 +1124,32 @@ class JobPageWidget(QWidget):
             print(f"Error creating job folder: {e}")
             QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
 
+    def create_quality_control_sheet(self, job_data, job_folder_path):
+        """Generate HTML quality control sheet for the job."""
+        try:
+            customer = job_data.get("Customer", "Unknown Customer")
+            job_ticket = job_data.get("Ticket#", job_data.get("Job Ticket#", "Unknown"))
+            po_number = job_data.get("PO#", "Unknown")
+            
+            # Create QC filename
+            qc_filename = f"{customer}-{job_ticket}-{po_number}-QualityControl.html"
+            qc_path = os.path.join(job_folder_path, qc_filename)
+            
+            # Generate the quality control sheet
+            result_path = generate_quality_control_sheet(job_data, qc_path)
+            
+            if result_path:
+                print(f"Quality control sheet created successfully: {result_path}")
+            else:
+                print("Warning: Quality control sheet generation failed")
+                QMessageBox.warning(self, "QC Sheet Warning", 
+                                  "Quality control sheet could not be generated, but job creation will continue.")
+            
+        except Exception as e:
+            print(f"Error creating quality control sheet: {e}")
+            # Don't show error dialog - this shouldn't block job creation
+            print("Job creation will continue without quality control sheet")
+
     def create_checklist_pdf(self, job_data, job_path):
         """
         Generates a checklist for the job and saves it in the specified job_path using threaded generation.
@@ -1715,6 +1742,9 @@ class JobPageWidget(QWidget):
                 QMessageBox.warning(
                     self, "Save Error", f"Could not save job_data.json.\n{e}"
                 )
+
+            # Generate quality control sheet
+            self.create_quality_control_sheet(job_data, job_folder_path)
 
             # Create checklist PDF
             self.create_checklist_pdf(job_data, job_folder_path)

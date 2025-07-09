@@ -1,0 +1,593 @@
+2025-07-09 09:06:49,365 - INFO - root - Logger initialized successfully.
+2025-07-09 09:06:49,396 - INFO - root - Log level: INFO
+2025-07-09 09:06:49,427 - INFO - root - Log file: c:\Users\Encoding 3\Desktop\Projects\Encoding Managment\app.log
+2025-07-09 09:06:50,237 - INFO - root - Creating main window...
+2025-07-09 09:06:53,480 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:06:53,551 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:06:53,551 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:06:53,551 - INFO - root -   Ticket#: 1
+2025-07-09 09:06:53,551 - INFO - root -   PO#: 1
+2025-07-09 09:06:53,551 - INFO - root -   UPC: 747363003636
+2025-07-09 09:06:53,561 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:06:53,561 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:06:53,566 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:06:53,567 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:06:53,570 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:06:53,579 - WARNING - root - Monitoring network drive detected: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 09:06:53,579 - INFO - root - Setting up LIMITED network monitoring (performance mode)
+2025-07-09 09:06:53,585 - INFO - root - Monitoring root directory only: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 09:06:53,586 - INFO - root - Network debounce timer set to: 2000ms
+2025-07-09 09:06:53,589 - INFO - root - Enabled periodic refresh every 30 seconds for network drive
+2025-07-09 09:06:53,681 - INFO - root - Loading archived jobs from: Z:/3 Encoding and Printing Files/Archived Jobs
+2025-07-09 09:06:54,151 - INFO - root - Loaded 4 archived jobs
+2025-07-09 09:06:54,151 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:06:54,151 - WARNING - root - No archive date found for job testststststtst, using current date
+2025-07-09 09:06:54,151 - WARNING - root - No archive date found for job 5124123, using current date
+2025-07-09 09:06:54,151 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:06:54,151 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:06:54,163 - WARNING - root - No archive date found for job testststststtst, using current date
+2025-07-09 09:06:54,163 - WARNING - root - No archive date found for job 5124123, using current date
+2025-07-09 09:06:54,163 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:07:13,154 - INFO - root - New job wizard cancelled.
+2025-07-09 09:07:23,699 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:07:23,699 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:07:23,699 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:07:23,699 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:07:23,872 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:07:23,872 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:07:23,889 - INFO - root -   Ticket#: 1
+2025-07-09 09:07:23,889 - INFO - root -   PO#: 1
+2025-07-09 09:07:23,889 - INFO - root -   UPC: 747363003636
+2025-07-09 09:07:23,889 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:07:23,889 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:07:23,889 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:07:23,889 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:07:23,910 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:07:23,914 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:07:23,920 - INFO - root - Selection restored
+2025-07-09 09:07:53,715 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:07:53,715 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:07:53,715 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:07:53,715 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:07:53,827 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:07:53,828 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:07:53,829 - INFO - root -   Ticket#: 1
+2025-07-09 09:07:53,829 - INFO - root -   PO#: 1
+2025-07-09 09:07:53,830 - INFO - root -   UPC: 747363003636
+2025-07-09 09:07:53,830 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:07:53,831 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:07:53,831 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:07:53,832 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:07:53,834 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:07:53,835 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:07:53,836 - INFO - root - Selection restored
+2025-07-09 09:08:23,684 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:08:23,684 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:08:23,684 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:08:23,684 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:08:23,763 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:08:23,764 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:08:23,766 - INFO - root -   Ticket#: 1
+2025-07-09 09:08:23,766 - INFO - root -   PO#: 1
+2025-07-09 09:08:23,766 - INFO - root -   UPC: 747363003636
+2025-07-09 09:08:23,766 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:08:23,767 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:08:23,767 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:08:23,767 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:08:23,769 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:08:23,772 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:08:23,772 - INFO - root - Selection restored
+2025-07-09 09:08:24,867 - INFO - root - No duplicates found - proceeding with job creation
+2025-07-09 09:08:24,900 - ERROR - root - Job not created: module 'src.config' has no attribute 'get_template_base_path'
+2025-07-09 09:08:53,730 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:08:53,740 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:08:53,740 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:08:53,740 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:08:53,811 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:08:53,813 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:08:53,815 - INFO - root -   Ticket#: 1
+2025-07-09 09:08:53,824 - INFO - root -   PO#: 1
+2025-07-09 09:08:53,825 - INFO - root -   UPC: 747363003636
+2025-07-09 09:08:53,825 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:08:53,825 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:08:53,825 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:08:53,825 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:08:53,825 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:08:53,825 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:08:53,829 - INFO - root - Selection restored
+2025-07-09 09:09:06,655 - INFO - root - New job wizard cancelled.
+2025-07-09 09:09:23,743 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:09:23,743 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:09:23,756 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:09:23,758 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:09:23,833 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:09:23,836 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:09:23,840 - INFO - root -   Ticket#: 1
+2025-07-09 09:09:23,840 - INFO - root -   PO#: 1
+2025-07-09 09:09:23,843 - INFO - root -   UPC: 747363003636
+2025-07-09 09:09:23,843 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:09:23,848 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:09:23,850 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:09:23,859 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:09:23,864 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:09:23,864 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:09:23,866 - INFO - root - Selection restored
+2025-07-09 09:09:53,723 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:09:53,726 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:09:53,728 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:09:53,728 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:09:53,805 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:09:53,807 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:09:53,809 - INFO - root -   Ticket#: 1
+2025-07-09 09:09:53,809 - INFO - root -   PO#: 1
+2025-07-09 09:09:53,809 - INFO - root -   UPC: 747363003636
+2025-07-09 09:09:53,809 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:09:53,816 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:09:53,816 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:09:53,816 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:09:53,819 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:09:53,822 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:09:53,824 - INFO - root - Selection restored
+2025-07-09 09:10:23,770 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:10:23,770 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:10:23,770 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:10:23,770 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:10:23,840 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:10:23,840 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:10:23,844 - INFO - root -   Ticket#: 1
+2025-07-09 09:10:23,845 - INFO - root -   PO#: 1
+2025-07-09 09:10:23,848 - INFO - root -   UPC: 747363003636
+2025-07-09 09:10:23,848 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:10:23,851 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:10:23,857 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:10:23,859 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:10:23,860 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:10:23,860 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:10:23,860 - INFO - root - Selection restored
+2025-07-09 09:10:53,787 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:10:53,788 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:10:53,788 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:10:53,788 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:10:53,868 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:10:53,870 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:10:53,870 - INFO - root -   Ticket#: 1
+2025-07-09 09:10:53,870 - INFO - root -   PO#: 1
+2025-07-09 09:10:53,870 - INFO - root -   UPC: 747363003636
+2025-07-09 09:10:53,873 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:10:53,873 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:10:53,873 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:10:53,873 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:10:53,875 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:10:53,875 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:10:53,878 - INFO - root - Selection restored
+2025-07-09 09:11:23,819 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:11:23,819 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:11:23,823 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:11:23,823 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:11:23,888 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:11:23,888 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:11:23,888 - INFO - root -   Ticket#: 1
+2025-07-09 09:11:23,888 - INFO - root -   PO#: 1
+2025-07-09 09:11:23,888 - INFO - root -   UPC: 747363003636
+2025-07-09 09:11:23,892 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:11:23,892 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:11:23,892 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:11:23,892 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:11:23,896 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:11:23,897 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:11:23,899 - INFO - root - Selection restored
+2025-07-09 09:11:53,831 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:11:53,836 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:11:53,839 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:11:53,839 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:11:53,906 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:11:53,906 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:11:53,906 - INFO - root -   Ticket#: 1
+2025-07-09 09:11:53,909 - INFO - root -   PO#: 1
+2025-07-09 09:11:53,909 - INFO - root -   UPC: 747363003636
+2025-07-09 09:11:53,909 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:11:53,910 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:11:53,910 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:11:53,912 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:11:53,913 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:11:53,915 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:11:53,916 - INFO - root - Selection restored
+2025-07-09 09:12:23,803 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:12:23,807 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:12:23,809 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:12:23,809 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:12:23,883 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:12:23,883 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:12:23,883 - INFO - root -   Ticket#: 1
+2025-07-09 09:12:23,883 - INFO - root -   PO#: 1
+2025-07-09 09:12:23,888 - INFO - root -   UPC: 747363003636
+2025-07-09 09:12:23,899 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:12:23,900 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:12:23,902 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:12:23,903 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:12:23,908 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:12:23,913 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:12:23,915 - INFO - root - Selection restored
+2025-07-09 09:12:53,775 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:12:53,775 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:12:53,777 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:12:53,777 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:12:53,840 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:12:53,841 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:12:53,841 - INFO - root -   Ticket#: 1
+2025-07-09 09:12:53,842 - INFO - root -   PO#: 1
+2025-07-09 09:12:53,842 - INFO - root -   UPC: 747363003636
+2025-07-09 09:12:53,842 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:12:53,842 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:12:53,842 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:12:53,845 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:12:53,848 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:12:53,848 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:12:53,852 - INFO - root - Selection restored
+2025-07-09 09:13:23,767 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:13:23,767 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:13:23,772 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:13:23,773 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:13:23,818 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:13:23,818 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:13:23,832 - INFO - root -   Ticket#: 1
+2025-07-09 09:13:23,832 - INFO - root -   PO#: 1
+2025-07-09 09:13:23,834 - INFO - root -   UPC: 747363003636
+2025-07-09 09:13:23,834 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:13:23,834 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:13:23,836 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:13:23,838 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:13:23,841 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:13:23,841 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:13:23,843 - INFO - root - Selection restored
+2025-07-09 09:13:53,785 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:13:53,785 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:13:53,785 - INFO - root - Preserving selection: ('1', '1')
+2025-07-09 09:13:53,793 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:13:53,855 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:13:53,859 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:13:53,860 - INFO - root -   Ticket#: 1
+2025-07-09 09:13:53,862 - INFO - root -   PO#: 1
+2025-07-09 09:13:53,865 - INFO - root -   UPC: 747363003636
+2025-07-09 09:13:53,866 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:13:53,867 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:13:53,868 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:13:53,869 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:13:53,872 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:13:53,874 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:13:53,877 - INFO - root - Selection restored
+2025-07-09 09:14:05,790 - INFO - root - New job wizard cancelled.
+2025-07-09 09:14:06,466 - INFO - root - save_data() is deprecated. Job data is managed in individual job folders.
+2025-07-09 09:14:09,308 - INFO - root - Logger initialized successfully.
+2025-07-09 09:14:09,308 - INFO - root - Log level: INFO
+2025-07-09 09:14:09,308 - INFO - root - Log file: c:\Users\Encoding 3\Desktop\Projects\Encoding Managment\app.log
+2025-07-09 09:14:09,516 - INFO - root - Creating main window...
+2025-07-09 09:14:12,096 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:14:12,164 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:14:12,164 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:14:12,170 - INFO - root -   Ticket#: 1
+2025-07-09 09:14:12,172 - INFO - root -   PO#: 1
+2025-07-09 09:14:12,172 - INFO - root -   UPC: 747363003636
+2025-07-09 09:14:12,175 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:14:12,175 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:14:12,176 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:14:12,176 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:14:12,179 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:14:12,180 - WARNING - root - Monitoring network drive detected: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 09:14:12,180 - INFO - root - Setting up LIMITED network monitoring (performance mode)
+2025-07-09 09:14:12,181 - INFO - root - Monitoring root directory only: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 09:14:12,181 - INFO - root - Network debounce timer set to: 2000ms
+2025-07-09 09:14:12,181 - INFO - root - Enabled periodic refresh every 30 seconds for network drive
+2025-07-09 09:14:12,246 - INFO - root - Loading archived jobs from: Z:/3 Encoding and Printing Files/Archived Jobs
+2025-07-09 09:14:12,770 - INFO - root - Loaded 4 archived jobs
+2025-07-09 09:14:12,770 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:14:12,777 - WARNING - root - No archive date found for job testststststtst, using current date
+2025-07-09 09:14:12,777 - WARNING - root - No archive date found for job 5124123, using current date
+2025-07-09 09:14:12,786 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:14:12,789 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:14:12,789 - WARNING - root - No archive date found for job testststststtst, using current date
+2025-07-09 09:14:12,792 - WARNING - root - No archive date found for job 5124123, using current date
+2025-07-09 09:14:12,792 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:14:42,387 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:14:42,387 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:14:42,387 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:14:42,496 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:14:42,504 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:14:42,504 - INFO - root -   Ticket#: 1
+2025-07-09 09:14:42,504 - INFO - root -   PO#: 1
+2025-07-09 09:14:42,504 - INFO - root -   UPC: 747363003636
+2025-07-09 09:14:42,504 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:14:42,504 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:14:42,504 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:14:42,518 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:14:42,526 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:14:42,531 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:15:02,450 - WARNING - root - Job creation aborted - upc_conflict detected
+2025-07-09 09:15:12,376 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:15:12,392 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:15:12,394 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:15:12,516 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:15:12,516 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:15:12,519 - INFO - root -   Ticket#: 1
+2025-07-09 09:15:12,519 - INFO - root -   PO#: 1
+2025-07-09 09:15:12,519 - INFO - root -   UPC: 747363003636
+2025-07-09 09:15:12,520 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:15:12,520 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:15:12,520 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:15:12,522 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:15:12,523 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:15:12,523 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:15:42,696 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:15:42,696 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:15:42,696 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:15:42,932 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:15:42,934 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:15:42,940 - INFO - root -   Ticket#: 1
+2025-07-09 09:15:42,956 - INFO - root -   PO#: 1
+2025-07-09 09:15:42,956 - INFO - root -   UPC: 747363003636
+2025-07-09 09:15:42,970 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:15:42,970 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:15:42,977 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:15:42,977 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:15:42,985 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:15:42,986 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:15:51,414 - INFO - root - No duplicates found - proceeding with job creation
+2025-07-09 09:15:51,414 - ERROR - root - Job not created: module 'src.config' has no attribute 'get_template_base_path'
+2025-07-09 09:16:12,418 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:16:12,418 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:16:12,418 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:16:12,507 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:16:12,507 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:16:12,517 - INFO - root -   Ticket#: 1
+2025-07-09 09:16:12,518 - INFO - root -   PO#: 1
+2025-07-09 09:16:12,519 - INFO - root -   UPC: 747363003636
+2025-07-09 09:16:12,520 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:16:12,521 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:16:12,523 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:16:12,529 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:16:12,532 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:16:12,534 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:16:42,464 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:16:42,464 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:16:42,468 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:16:42,570 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:16:42,571 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:16:42,573 - INFO - root -   Ticket#: 1
+2025-07-09 09:16:42,574 - INFO - root -   PO#: 1
+2025-07-09 09:16:42,574 - INFO - root -   UPC: 747363003636
+2025-07-09 09:16:42,574 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:16:42,574 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:16:42,576 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:16:42,576 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:16:42,580 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:16:42,580 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:17:12,917 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:17:12,917 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:17:12,917 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:17:12,993 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:17:12,999 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:17:12,999 - INFO - root -   Ticket#: 1
+2025-07-09 09:17:12,999 - INFO - root -   PO#: 1
+2025-07-09 09:17:12,999 - INFO - root -   UPC: 747363003636
+2025-07-09 09:17:13,002 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:17:13,002 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:17:13,002 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:17:13,004 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:17:13,005 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:17:13,007 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:17:42,504 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:17:42,535 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:17:42,536 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:17:42,661 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:17:42,662 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:17:42,663 - INFO - root -   Ticket#: 1
+2025-07-09 09:17:42,664 - INFO - root -   PO#: 1
+2025-07-09 09:17:42,664 - INFO - root -   UPC: 747363003636
+2025-07-09 09:17:42,665 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:17:42,665 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:17:42,666 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:17:42,666 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:17:42,668 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:17:42,669 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:18:12,468 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:18:12,468 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:18:12,468 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:18:12,584 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:18:12,592 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:18:12,609 - INFO - root -   Ticket#: 1
+2025-07-09 09:18:12,612 - INFO - root -   PO#: 1
+2025-07-09 09:18:12,612 - INFO - root -   UPC: 747363003636
+2025-07-09 09:18:12,615 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:18:12,619 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:18:12,619 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:18:12,619 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:18:12,628 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:18:12,628 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:18:42,501 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:18:42,501 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:18:42,503 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:18:42,641 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:18:42,641 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:18:42,641 - INFO - root -   Ticket#: 1
+2025-07-09 09:18:42,645 - INFO - root -   PO#: 1
+2025-07-09 09:18:42,645 - INFO - root -   UPC: 747363003636
+2025-07-09 09:18:42,645 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:18:42,645 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:18:42,645 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:18:42,645 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:18:42,649 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:18:42,649 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:19:12,525 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:19:12,525 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:19:12,532 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:19:12,657 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:19:12,657 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:19:12,657 - INFO - root -   Ticket#: 1
+2025-07-09 09:19:12,657 - INFO - root -   PO#: 1
+2025-07-09 09:19:12,667 - INFO - root -   UPC: 747363003636
+2025-07-09 09:19:12,667 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:19:12,667 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:19:12,668 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:19:12,673 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:19:12,679 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:19:12,679 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:19:42,507 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:19:42,507 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:19:42,513 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:19:42,654 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:19:42,658 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:19:42,659 - INFO - root -   Ticket#: 1
+2025-07-09 09:19:42,659 - INFO - root -   PO#: 1
+2025-07-09 09:19:42,662 - INFO - root -   UPC: 747363003636
+2025-07-09 09:19:42,665 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:19:42,668 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:19:42,670 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:19:42,671 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:19:42,673 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:19:42,675 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:20:12,508 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:20:12,508 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:20:12,508 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:20:12,617 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:20:12,617 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:20:12,626 - INFO - root -   Ticket#: 1
+2025-07-09 09:20:12,626 - INFO - root -   PO#: 1
+2025-07-09 09:20:12,626 - INFO - root -   UPC: 747363003636
+2025-07-09 09:20:12,626 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:20:12,629 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:20:12,632 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:20:12,633 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:20:12,641 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:20:12,641 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:20:42,485 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:20:42,485 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:20:42,485 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:20:42,595 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:20:42,595 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:20:42,598 - INFO - root -   Ticket#: 1
+2025-07-09 09:20:42,598 - INFO - root -   PO#: 1
+2025-07-09 09:20:42,598 - INFO - root -   UPC: 747363003636
+2025-07-09 09:20:42,600 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:20:42,600 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:20:42,601 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:20:42,602 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:20:42,605 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:20:42,609 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:21:12,453 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:21:12,453 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:21:12,453 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:21:12,558 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:21:12,558 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:21:12,565 - INFO - root -   Ticket#: 1
+2025-07-09 09:21:12,565 - INFO - root -   PO#: 1
+2025-07-09 09:21:12,575 - INFO - root -   UPC: 747363003636
+2025-07-09 09:21:12,580 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:21:12,582 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:21:12,584 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:21:12,586 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:21:12,592 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:21:12,603 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:21:42,579 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:21:42,579 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:21:42,579 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:21:42,678 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:21:42,678 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:21:42,678 - INFO - root -   Ticket#: 1
+2025-07-09 09:21:42,678 - INFO - root -   PO#: 1
+2025-07-09 09:21:42,678 - INFO - root -   UPC: 747363003636
+2025-07-09 09:21:42,678 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:21:42,678 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:21:42,686 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:21:42,686 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:21:42,686 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:21:42,686 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:22:12,868 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:22:12,868 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:22:12,868 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:22:13,071 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:22:13,072 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:22:13,073 - INFO - root -   Ticket#: 1
+2025-07-09 09:22:13,073 - INFO - root -   PO#: 1
+2025-07-09 09:22:13,073 - INFO - root -   UPC: 747363003636
+2025-07-09 09:22:13,075 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:22:13,076 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:22:13,078 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:22:13,079 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:22:13,082 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:22:13,086 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:22:17,712 - INFO - root - save_data() is deprecated. Job data is managed in individual job folders.
+2025-07-09 09:22:20,494 - INFO - root - Logger initialized successfully.
+2025-07-09 09:22:20,495 - INFO - root - Log level: INFO
+2025-07-09 09:22:20,495 - INFO - root - Log file: c:\Users\Encoding 3\Desktop\Projects\Encoding Managment\app.log
+2025-07-09 09:22:20,868 - INFO - root - Creating main window...
+2025-07-09 09:22:22,605 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:22:22,713 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:22:22,721 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:22:22,722 - INFO - root -   Ticket#: 1
+2025-07-09 09:22:22,723 - INFO - root -   PO#: 1
+2025-07-09 09:22:22,724 - INFO - root -   UPC: 747363003636
+2025-07-09 09:22:22,725 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:22:22,726 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:22:22,726 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:22:22,728 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:22:22,729 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:22:22,745 - WARNING - root - Monitoring network drive detected: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 09:22:22,750 - INFO - root - Setting up LIMITED network monitoring (performance mode)
+2025-07-09 09:22:22,753 - INFO - root - Monitoring root directory only: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 09:22:22,754 - INFO - root - Network debounce timer set to: 2000ms
+2025-07-09 09:22:22,756 - INFO - root - Enabled periodic refresh every 30 seconds for network drive
+2025-07-09 09:22:22,846 - INFO - root - Loading archived jobs from: Z:/3 Encoding and Printing Files/Archived Jobs
+2025-07-09 09:22:23,210 - INFO - root - Loaded 4 archived jobs
+2025-07-09 09:22:23,210 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:22:23,210 - WARNING - root - No archive date found for job testststststtst, using current date
+2025-07-09 09:22:23,226 - WARNING - root - No archive date found for job 5124123, using current date
+2025-07-09 09:22:23,228 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:22:23,229 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:22:23,234 - WARNING - root - No archive date found for job testststststtst, using current date
+2025-07-09 09:22:23,234 - WARNING - root - No archive date found for job 5124123, using current date
+2025-07-09 09:22:23,237 - WARNING - root - No archive date found for job test, using current date
+2025-07-09 09:22:52,950 - INFO - root - Performing periodic refresh for network drive...
+2025-07-09 09:22:52,950 - INFO - root - === Refreshing jobs table due to file system changes ===
+2025-07-09 09:22:52,950 - INFO - root - --- Loading jobs from source directory: Z:/3 Encoding and Printing Files/Active Jobs ---
+2025-07-09 09:22:53,043 - INFO - root - === Attempting to add job to table ===
+2025-07-09 09:22:53,043 - INFO - root -   Customer: Peak Technologies
+2025-07-09 09:22:53,049 - INFO - root -   Ticket#: 1
+2025-07-09 09:22:53,051 - INFO - root -   PO#: 1
+2025-07-09 09:22:53,051 - INFO - root -   UPC: 747363003636
+2025-07-09 09:22:53,054 - INFO - root -   Current table size: 0 jobs
+2025-07-09 09:22:53,055 - INFO - root -   No conflicts found - proceeding to add job
+2025-07-09 09:22:53,056 - INFO - root - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 09:22:53,056 - INFO - root - Table now contains 1 jobs
+2025-07-09 09:22:53,060 - INFO - root - Found 1 jobs in source directory
+2025-07-09 09:22:53,061 - INFO - root - Job count changed from 1 to 1
+2025-07-09 09:23:17,361 - INFO - root - New job wizard cancelled.
+2025-07-09 09:23:18,327 - INFO - root - save_data() is deprecated. Job data is managed in individual job folders.
+2025-07-09 09:45:15,839 - root - INFO - Logger initialized successfully. (logger.py:49)
+2025-07-09 09:46:04,319 - root - INFO - Logger initialized successfully. (logger.py:49)
+2025-07-09 09:46:04,688 - root - INFO - Application starting... (main.py:335)
+2025-07-09 09:46:06,936 - root - DEBUG - === Attempting to add job to table === (job_page.py:469)
+2025-07-09 09:46:06,938 - root - DEBUG -   Customer: Peak Technologies (job_page.py:470)
+2025-07-09 09:46:06,938 - root - DEBUG -   Ticket#: 1 (job_page.py:471)
+2025-07-09 09:46:06,938 - root - DEBUG -   PO#: 1 (job_page.py:472)
+2025-07-09 09:46:06,940 - root - DEBUG -   UPC: 747363003636 (job_page.py:473)
+2025-07-09 09:46:06,940 - root - DEBUG -   Current table size: 0 jobs (job_page.py:474)
+2025-07-09 09:46:06,940 - root - DEBUG -   No conflicts found - proceeding to add job (job_page.py:516)
+2025-07-09 09:46:06,943 - root - INFO - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1 (job_page.py:542)
+2025-07-09 09:46:06,943 - root - INFO - Table now contains 1 jobs (job_page.py:543)
+2025-07-09 09:46:06,958 - root - DEBUG - === Attempting to add job to table === (job_page.py:469)
+2025-07-09 09:46:06,962 - root - DEBUG -   Customer: Peak Technologies (job_page.py:470)
+2025-07-09 09:46:06,962 - root - DEBUG -   Ticket#: 2 (job_page.py:471)
+2025-07-09 09:46:06,962 - root - DEBUG -   PO#: 2 (job_page.py:472)
+2025-07-09 09:46:06,962 - root - DEBUG -   UPC: 748363003633 (job_page.py:473)
+2025-07-09 09:46:06,962 - root - DEBUG -   Current table size: 1 jobs (job_page.py:474)
+2025-07-09 09:46:06,964 - root - DEBUG -   No conflicts found - proceeding to add job (job_page.py:516)
+2025-07-09 09:46:06,964 - root - INFO - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 2, Ticket#: 2 (job_page.py:542)
+2025-07-09 09:46:06,965 - root - INFO - Table now contains 2 jobs (job_page.py:543)
+2025-07-09 09:46:06,985 - root - WARNING - Monitoring network drive detected: Z:/3 Encoding and Printing Files/Active Jobs (job_page.py:169)
+2025-07-09 09:46:06,988 - root - WARNING - Network drive monitoring may cause performance issues with multiple users. (job_page.py:170)
+2025-07-09 09:46:06,988 - root - WARNING - Consider using periodic refresh instead of real-time monitoring. (job_page.py:171)
+2025-07-09 09:46:06,989 - root - INFO - Setting up LIMITED network monitoring (performance mode) (job_page.py:193)
+2025-07-09 09:46:06,989 - root - INFO - Monitoring root directory only: Z:/3 Encoding and Printing Files/Active Jobs (job_page.py:199)
+2025-07-09 09:46:06,992 - root - INFO - Network debounce timer set to: 2000ms (job_page.py:206)
+2025-07-09 09:46:06,992 - root - INFO - Enabled periodic refresh every 30 seconds for network drive (job_page.py:214)
+2025-07-09 09:46:26,353 - root - INFO - Closing application (main.py:313)

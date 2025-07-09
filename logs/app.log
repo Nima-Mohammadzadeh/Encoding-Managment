@@ -1,0 +1,18 @@
+2025-07-09 10:12:11 - src.utils.logger - INFO - __init__:117 - Logger initialized
+2025-07-09 10:12:15 - src.tabs.job_page - DEBUG - add_job_to_table:470 - === Attempting to add job to table ===
+2025-07-09 10:12:15 - src.tabs.job_page - DEBUG - add_job_to_table:471 -   Customer: Peak Technologies
+2025-07-09 10:12:15 - src.tabs.job_page - DEBUG - add_job_to_table:472 -   Ticket#: 1
+2025-07-09 10:12:15 - src.tabs.job_page - DEBUG - add_job_to_table:473 -   PO#: 1
+2025-07-09 10:12:15 - src.tabs.job_page - DEBUG - add_job_to_table:474 -   UPC: 747363003636
+2025-07-09 10:12:15 - src.tabs.job_page - DEBUG - add_job_to_table:475 -   Current table size: 0 jobs
+2025-07-09 10:12:15 - src.tabs.job_page - DEBUG - add_job_to_table:517 -   No conflicts found - proceeding to add job
+2025-07-09 10:12:15 - src.tabs.job_page - INFO - add_job_to_table:543 - SUCCESS: Added job to table - Customer: Peak Technologies, PO#: 1, Ticket#: 1
+2025-07-09 10:12:15 - src.tabs.job_page - INFO - add_job_to_table:544 - Table now contains 1 jobs
+2025-07-09 10:12:15 - src.tabs.job_page - WARNING - setup_directory_monitoring:170 - Monitoring network drive detected: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 10:12:15 - src.tabs.job_page - WARNING - setup_directory_monitoring:171 - Network drive monitoring may cause performance issues with multiple users.
+2025-07-09 10:12:15 - src.tabs.job_page - WARNING - setup_directory_monitoring:172 - Consider using periodic refresh instead of real-time monitoring.
+2025-07-09 10:12:15 - src.tabs.job_page - INFO - setup_limited_network_monitoring:194 - Setting up LIMITED network monitoring (performance mode)
+2025-07-09 10:12:15 - src.tabs.job_page - INFO - setup_limited_network_monitoring:200 - Monitoring root directory only: Z:/3 Encoding and Printing Files/Active Jobs
+2025-07-09 10:12:15 - src.tabs.job_page - INFO - setup_limited_network_monitoring:207 - Network debounce timer set to: 2000ms
+2025-07-09 10:12:15 - src.tabs.job_page - INFO - setup_limited_network_monitoring:215 - Enabled periodic refresh every 30 seconds for network drive
+2025-07-09 10:12:21 - __main__ - INFO - closeEvent:316 - Closing application

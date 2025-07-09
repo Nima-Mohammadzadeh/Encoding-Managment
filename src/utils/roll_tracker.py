@@ -1,5 +1,6 @@
 import os
 import math
+from datetime import datetime
 
 # Assuming epc_conversion.py is in the same utils folder or accessible
 from .epc_conversion import generate_epc
@@ -54,6 +55,95 @@ def generate_roll_tracker_html(params):
 
     except Exception as e:
         print(f"Error generating roll tracker HTML: {e}")
+        return None
+
+def generate_quality_control_sheet(job_data, output_path):
+    """
+    Generate a standalone HTML quality control sheet for printing based on job data.
+    This is designed to be used during job creation automation.
+    
+    Args:
+        job_data (dict): Complete job data from the wizard containing all job information
+        output_path (str): Full path where the QC sheet HTML file should be saved
+    
+    Returns:
+        str: The full path to the generated HTML file, or None on failure
+    """
+    try:
+        # Extract job information
+        customer = job_data.get('Customer', 'Unknown Customer')
+        job_ticket = job_data.get('Job Ticket#', job_data.get('Ticket#', 'Unknown'))
+        po_number = job_data.get('PO#', 'Unknown')
+        part_number = job_data.get('Part#', 'Unknown')
+        item = job_data.get('Item', 'Unknown')
+        upc = job_data.get('UPC Number', '')
+        quantity = int(job_data.get('Quantity', job_data.get('Qty', 0)))
+        lpr = int(job_data.get('LPR', 100))
+        inlay_type = job_data.get('Inlay Type', 'Unknown')
+        label_size = job_data.get('Label Size', 'Unknown')
+        due_date = job_data.get('Due Date', 'Unknown')
+        
+        # Handle serial number - could be from various sources
+        start_serial = 1
+        if 'Serial Range Start' in job_data:
+            start_serial = int(job_data['Serial Range Start'])
+        elif 'Serial Number' in job_data and job_data['Serial Number']:
+            start_serial = int(job_data['Serial Number'])
+        elif 'Start' in job_data and job_data['Start']:
+            start_serial = int(job_data['Start'])
+        
+        # Calculate total quantity (may include buffers for EPC jobs)
+        total_quantity = quantity
+        if 'Total Quantity with Buffers' in job_data:
+            total_quantity = int(job_data['Total Quantity with Buffers'])
+        elif job_data.get('Enable EPC Generation', False):
+            # Calculate with potential buffers
+            from .epc_conversion import calculate_total_quantity_with_percentages
+            include_2_percent = job_data.get('Include 2% Buffer', False)
+            include_7_percent = job_data.get('Include 7% Buffer', False)
+            total_quantity = calculate_total_quantity_with_percentages(
+                quantity, include_2_percent, include_7_percent
+            )
+        
+        # Calculate roll information
+        num_rolls = math.ceil(total_quantity / lpr)
+        rolls_data = []
+        current_serial = start_serial
+        
+        for roll_num in range(1, num_rolls + 1):
+            remaining_qty = total_quantity - (roll_num - 1) * lpr
+            roll_qty = min(lpr, remaining_qty)
+            
+            roll_start_serial = current_serial
+            roll_end_serial = current_serial + roll_qty - 1
+            
+            roll_info = {
+                'roll_number': roll_num,
+                'quantity': roll_qty,
+                'start_serial': roll_start_serial,
+                'end_serial': roll_end_serial,
+                'start_epc': generate_epc(upc, roll_start_serial) if upc else 'N/A',
+                'end_epc': generate_epc(upc, roll_end_serial) if upc else 'N/A'
+            }
+            rolls_data.append(roll_info)
+            current_serial += roll_qty
+        
+        # Generate the HTML content
+        html_content = _generate_qc_sheet_html(
+            customer, job_ticket, po_number, part_number, item, upc,
+            quantity, total_quantity, lpr, inlay_type, label_size, 
+            due_date, rolls_data
+        )
+        
+        # Write the HTML file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"Quality control sheet generated: {output_path}")
+        return output_path
+        
+    except Exception as e:
+        print(f"Error generating quality control sheet: {e}")
         return None
 
 def _short_epc(e):
@@ -135,6 +225,258 @@ def _get_qc_page_html(job_ticket, customer, upc, qc_rolls):
 
     html.append("</table></div>")
     return "".join(html)
+
+def _generate_qc_sheet_html(customer, job_ticket, po_number, part_number, item, upc,
+                           quantity, total_quantity, lpr, inlay_type, label_size, 
+                           due_date, rolls_data):
+    """Generate the complete HTML content for the quality control sheet."""
+    
+    html = [
+        '<!DOCTYPE html>',
+        '<html lang="en">',
+        '<head>',
+        '<meta charset="UTF-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+        f'<title>Quality Control Sheet - {customer} - {job_ticket}</title>',
+        _get_qc_sheet_style(),
+        '</head>',
+        '<body>',
+        '<div class="qc-sheet">',
+        
+        # Header
+        '<div class="header">',
+        '<h1>QUALITY CONTROL</h1>',
+        '</div>',
+        
+        # Combined Job Information Section
+        '<div class="job-info-section">',
+        '<h2>Job Information</h2>',
+        '<div class="info-grid">',
+        f'<div class="info-item"><span class="label">Customer:</span> <span class="value">{customer}</span></div>',
+        f'<div class="info-item"><span class="label">Job Ticket #:</span> <span class="value">{job_ticket}</span></div>',
+        f'<div class="info-item"><span class="label">PO #:</span> <span class="value">{po_number}</span></div>',
+        f'<div class="info-item"><span class="label">Part #:</span> <span class="value">{part_number}</span></div>',
+        f'<div class="info-item"><span class="label">Item:</span> <span class="value">{item}</span></div>',
+        f'<div class="info-item"><span class="label">Due Date:</span> <span class="value">{due_date}</span></div>',
+        f'<div class="info-item"><span class="label">UPC Number:</span> <span class="value">{upc if upc else "N/A"}</span></div>',
+        f'<div class="info-item"><span class="label">Inlay Type:</span> <span class="value">{inlay_type}</span></div>',
+        f'<div class="info-item"><span class="label">Label Size:</span> <span class="value">{label_size}</span></div>',
+        f'<div class="info-item"><span class="label">Base Quantity:</span> <span class="value">{quantity:,}</span></div>',
+        f'<div class="info-item"><span class="label">Total Quantity:</span> <span class="value">{total_quantity:,}</span></div>',
+        f'<div class="info-item"><span class="label">Labels Per Roll:</span> <span class="value">{lpr:,}</span></div>',
+        '</div>',
+        '</div>',
+        
+        # Roll Tracking Table
+        '<div class="roll-tracking-section">',
+        '<h2>Roll Tracking & Quality Control</h2>',
+        '<table class="roll-table">',
+        '<thead>',
+        '<tr>',
+        '<th>Roll #</th>',
+        '<th>Quantity</th>',
+        '<th>Serial Range</th>',
+    ]
+    
+    # Add EPC columns if UPC is available
+    if upc:
+        html.extend([
+            '<th>Start EPC</th>',
+            '<th>End EPC</th>',
+        ])
+    
+    html.extend([
+        '</tr>',
+        '</thead>',
+        '<tbody>',
+    ])
+    
+    # Add roll data rows
+    for roll in rolls_data:
+        html.append('<tr>')
+        html.append(f'<td class="roll-number">{roll["roll_number"]}</td>')
+        html.append(f'<td class="quantity">{roll["quantity"]:,}</td>')
+        html.append(f'<td class="serial-range">{roll["start_serial"]:,} - {roll["end_serial"]:,}</td>')
+        
+        if upc:
+            html.append(f'<td class="epc">{_short_epc(roll["start_epc"])}</td>')
+            html.append(f'<td class="epc">{_short_epc(roll["end_epc"])}</td>')
+        
+        html.append('</tr>')
+    
+    html.extend([
+        '</tbody>',
+        '</table>',
+        '</div>',
+        
+        '</div>',
+        '</body>',
+        '</html>'
+    ])
+    
+    return '\n'.join(html)
+
+def _get_qc_sheet_style():
+    """Return CSS styles optimized for printing quality control sheets."""
+    return '''
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-size: 12pt;
+            line-height: 1.4;
+            color: #333;
+            background: white;
+        }
+        
+        .qc-sheet {
+            width: 100%;
+            max-width: none;
+            margin: 0 auto;
+            padding: 0.3in;
+            background: white;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 0.1in;
+            border-bottom: 3px solid #333;
+            padding-bottom: 0.1in;
+        }
+        
+        .header h1 {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 0.1in;
+        }
+        
+
+        
+        .job-info-section, .roll-tracking-section {
+            margin-bottom: 0.3in;
+        }
+        
+        h2 {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 0.15in;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 0.05in;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.1in;
+            margin-bottom: 0.2in;
+        }
+        
+        .info-item {
+            display: flex;
+            padding: 0.05in 0;
+        }
+        
+        .label {
+            font-weight: bold;
+            width: 1.5in;
+            flex-shrink: 0;
+        }
+        
+        .value {
+            border-bottom: 1px dotted #999;
+            flex-grow: 1;
+            min-height: 1.2em;
+        }
+        
+        .roll-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11pt;
+            margin-bottom: 0.2in;
+        }
+        
+        .roll-table th,
+        .roll-table td {
+            border: 1px solid #333;
+            padding: 0.08in;
+            text-align: center;
+            vertical-align: middle;
+        }
+        
+        .roll-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            font-size: 10pt;
+        }
+        
+        .roll-number {
+            font-weight: bold;
+            background-color: #fafafa;
+        }
+        
+        .serial-range {
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+        }
+        
+        .epc {
+            font-family: 'Courier New', monospace;
+            font-size: 9pt;
+        }
+        
+
+        
+        /* Print-specific styles */
+        @page {
+            size: letter;
+            margin: 0.5in;
+        }
+        
+        @media print {
+            body {
+                font-size: 11pt;
+            }
+            
+            .qc-sheet {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .header h1 {
+                font-size: 20pt;
+            }
+            
+            h2 {
+                font-size: 14pt;
+            }
+            
+            .roll-table {
+                font-size: 10pt;
+            }
+            
+            .roll-table th {
+                font-size: 9pt;
+            }
+            
+            /* Ensure table doesn't break across pages poorly */
+            .roll-table {
+                page-break-inside: avoid;
+            }
+            
+            .roll-tracking-section {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+    '''
 
 def _get_html_style():
     return """
