@@ -8,12 +8,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QPropertyAnimation, QEasingCurve, QRect
 from PySide6.QtGui import QFont, QColor, QPalette, QIcon, QPainter, QBrush, QPen
-try:
-    from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
-    CHARTS_AVAILABLE = True
-except ImportError:
-    CHARTS_AVAILABLE = False
-    print("PySide6.QtCharts not available - charts will be disabled")
 import src.config as config
 
 
@@ -87,58 +81,15 @@ class StatCard(QFrame):
         super().mousePressEvent(event)
 
 
-class ActivityItem(QFrame):
-    """A single activity item in the activity feed."""
-    
-    def __init__(self, icon, text, timestamp, color="#0078d4", parent=None):
-        super().__init__(parent)
-        self.setFrameStyle(QFrame.Shape.NoFrame)
-        self.setMinimumHeight(45)
-        self.setMaximumHeight(60)
-        
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        
-        # Icon/Badge
-        icon_label = QLabel(icon)
-        icon_label.setFixedSize(28, 28)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(f"""
-            QLabel {{
-                background-color: {color};
-                border-radius: 14px;
-                color: white;
-                font-weight: bold;
-                font-size: 12px;
-            }}
-        """)
-        layout.addWidget(icon_label)
-        
-        # Text content
-        text_layout = QVBoxLayout()
-        text_layout.setSpacing(1)
-        
-        text_label = QLabel(text)
-        text_label.setStyleSheet("color: #e0e0e0; font-size: 11px;")
-        text_label.setWordWrap(True)
-        text_layout.addWidget(text_label)
-        
-        time_label = QLabel(timestamp)
-        time_label.setStyleSheet("color: #888888; font-size: 10px;")
-        text_layout.addWidget(time_label)
-        
-        layout.addLayout(text_layout, 1)
-
-
 class DeadlineItem(QFrame):
     """A deadline item showing job with due date."""
+    clicked = Signal(dict)
     
     def __init__(self, job_data, parent=None):
         super().__init__(parent)
         self.job_data = job_data
         self.setFrameStyle(QFrame.Shape.NoFrame)
-        self.setMinimumHeight(70)
-        self.setMaximumHeight(85)
+        self.setMinimumHeight(80)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         
         self.setStyleSheet("""
@@ -162,13 +113,26 @@ class DeadlineItem(QFrame):
         header_layout = QHBoxLayout()
         customer_label = QLabel(job_data.get("Customer", "Unknown"))
         customer_label.setStyleSheet("color: #e0e0e0; font-weight: bold; font-size: 11px;")
-        header_layout.addWidget(customer_label)
+        customer_label.setWordWrap(True)
+        header_layout.addWidget(customer_label, 1) # Add stretch factor
         
+        # Right-aligned details (Ticket and PO)
+        right_details_layout = QVBoxLayout()
+        right_details_layout.setSpacing(4)
+        
+        ticket_number = job_data.get('Job Ticket#', job_data.get('Ticket#', 'N/A'))
+        ticket_label = QLabel(f"#{ticket_number}")
+        ticket_label.setStyleSheet("color: #cccccc; font-size: 11px; font-weight: bold;")
+        ticket_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        right_details_layout.addWidget(ticket_label)
+
         po_label = QLabel(f"PO: {job_data.get('PO#', 'N/A')}")
         po_label.setStyleSheet("color: #888888; font-size: 10px;")
-        header_layout.addWidget(po_label)
-        header_layout.addStretch()
+        po_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        right_details_layout.addWidget(po_label)
         
+        header_layout.addLayout(right_details_layout)
+
         layout.addLayout(header_layout)
         
         # Due date and days remaining
@@ -206,9 +170,14 @@ class DeadlineItem(QFrame):
             except:
                 pass
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.job_data)
+        super().mousePressEvent(event)
+
 
 class DashboardPageWidget(QWidget):
-    """Main dashboard widget with statistics, activity feed, and quick actions."""
+    """Main dashboard widget with statistics and quick actions."""
     
     # Signals
     navigate_to_jobs = Signal()
@@ -216,6 +185,7 @@ class DashboardPageWidget(QWidget):
     navigate_to_tools = Signal()
     navigate_to_reports = Signal()
     create_new_job = Signal()
+    open_job_details = Signal(dict)
     
     def __init__(self, base_path):
         super().__init__()
@@ -318,37 +288,36 @@ class DashboardPageWidget(QWidget):
         header_layout.addWidget(refresh_btn)
         
         main_layout.addLayout(header_layout)
-        
-        # Statistics Cards Row
-        stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(12)
-        
-        self.jobs_backlog_card = StatCard("Jobs in Backlog", "0", color="#0078d4")
-        self.jobs_backlog_card.clicked.connect(self.navigate_to_jobs.emit)
-        stats_layout.addWidget(self.jobs_backlog_card)
-        
-        self.total_backlog_qty_card = StatCard("Total Backlog Qty", "0", color="#f39c12")
-        stats_layout.addWidget(self.total_backlog_qty_card)
-        
-        self.completed_week_card = StatCard("Completed This Week", "0", color="#27ae60")
-        stats_layout.addWidget(self.completed_week_card)
-        
-        self.completed_qty_week_card = StatCard("Completed Qty This Week", "0", color="#27ae60")
-        stats_layout.addWidget(self.completed_qty_week_card)
-        
-        self.overdue_jobs_card = StatCard("Overdue Jobs", "0", color="#e74c3c")
-        stats_layout.addWidget(self.overdue_jobs_card)
-        
-        main_layout.addLayout(stats_layout)
-        
-        # Content area with two columns
+
+        # Main content area with two columns
         content_layout = QHBoxLayout()
         content_layout.setSpacing(15)
-        
-        # Left column - Activity Feed and Quick Actions
+
+        # Left column - Stats Grid and Quick Actions
         left_column = QVBoxLayout()
-        left_column.setSpacing(10)
-        
+        left_column.setSpacing(15)
+
+        # Stats Grid (2x2)
+        stats_grid = QGridLayout()
+        stats_grid.setSpacing(12)
+
+        # Create stat cards in 2x2 grid
+        self.jobs_backlog_card = StatCard("Jobs in Backlog", "0", color="#0078d4")
+        self.jobs_backlog_card.clicked.connect(self.navigate_to_jobs.emit)
+        stats_grid.addWidget(self.jobs_backlog_card, 0, 0)
+
+        self.total_backlog_qty_card = StatCard("Total Backlog Qty", "0", color="#f39c12")
+        stats_grid.addWidget(self.total_backlog_qty_card, 0, 1)
+
+        self.completed_week_card = StatCard("Completed This Week", "0", color="#27ae60")
+        stats_grid.addWidget(self.completed_week_card, 1, 0)
+
+        self.completed_qty_week_card = StatCard("Completed Qty This Week", "0", color="#27ae60")
+        stats_grid.addWidget(self.completed_qty_week_card, 1, 1)
+
+        # Add stats grid to left column
+        left_column.addLayout(stats_grid)
+
         # Quick Actions
         actions_frame = QFrame()
         actions_frame.setStyleSheet("""
@@ -391,7 +360,7 @@ class DashboardPageWidget(QWidget):
         """)
         new_job_btn.clicked.connect(self.create_new_job.emit)
         actions_grid.addWidget(new_job_btn, 0, 0, 1, 2)  # Span 2 columns
-        
+
         # Secondary action buttons in grid (2x3 grid)
         buttons = [
             ("📋 View Jobs", self.navigate_to_jobs.emit, "#27ae60"),
@@ -434,169 +403,27 @@ class DashboardPageWidget(QWidget):
             actions_grid.addWidget(btn, row, col)
         
         actions_layout.addLayout(actions_grid)
-        
         left_column.addWidget(actions_frame)
-        
-        # Activity Feed
-        activity_frame = QFrame()
-        activity_frame.setStyleSheet("""
-            QFrame {
-                background-color: #2d2d30;
-                border: 1px solid #464647;
-                border-radius: 6px;
-                padding: 10px;
-            }
-        """)
-        activity_layout = QVBoxLayout(activity_frame)
-        
-        activity_title = QLabel("Recent Activity")
-        activity_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
-        activity_layout.addWidget(activity_title)
-        
-        # Activity scroll area
-        self.activity_scroll = QScrollArea()
-        self.activity_scroll.setWidgetResizable(True)
-        self.activity_scroll.setMaximumHeight(350)
-        self.activity_scroll.setStyleSheet("""
-            QScrollArea {
-                background-color: transparent;
-                border: none;
-            }
-            QScrollBar:vertical {
-                background-color: #2d2d30;
-                width: 10px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #464647;
-                border-radius: 5px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #5a5a5a;
-            }
-        """)
-        
-        self.activity_widget = QWidget()
-        self.activity_layout = QVBoxLayout(self.activity_widget)
-        self.activity_layout.setSpacing(5)
-        self.activity_scroll.setWidget(self.activity_widget)
-        
-        activity_layout.addWidget(self.activity_scroll)
-        left_column.addWidget(activity_frame, 1)
-        
+
+        # Add stretch to prevent vertical stretching
+        left_column.addStretch()
+
+        # Add left column to content layout
         content_layout.addLayout(left_column, 1)
-        
+
         # Right column - Job Distribution Chart and Upcoming Deadlines
         right_column = QVBoxLayout()
-        right_column.setSpacing(10)
+        right_column.setSpacing(15)
+
+        # Interactive Calendar - now takes full available space
+        from src.widgets.interactive_calendar import InteractiveCalendarWidget
         
-        # Job Status Chart (moved to top)
-        if CHARTS_AVAILABLE:
-            chart_frame = QFrame()
-            chart_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #2d2d30;
-                    border: 1px solid #464647;
-                    border-radius: 6px;
-                    padding: 10px;
-                }
-            """)
-            chart_layout = QVBoxLayout(chart_frame)
-            
-            chart_title = QLabel("Job Distribution")
-            chart_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
-            chart_layout.addWidget(chart_title)
-            
-            # Create pie chart
-            self.chart = QChart()
-            self.chart.setAnimationOptions(QChart.AnimationOption.SeriesAnimations)
-            self.chart.setBackgroundBrush(QBrush(QColor("#2d2d30")))
-            self.chart.setTitleBrush(QBrush(QColor("#e0e0e0")))
-            self.chart.legend().setLabelColor(QColor("#e0e0e0"))
-            
-            self.chart_view = QChartView(self.chart)
-            self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-            self.chart_view.setMinimumHeight(200)
-            self.chart_view.setMaximumHeight(250)
-            
-            chart_layout.addWidget(self.chart_view)
-            right_column.addWidget(chart_frame)
-        else:
-            # Fallback when charts are not available
-            fallback_frame = QFrame()
-            fallback_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #2d2d30;
-                    border: 1px solid #464647;
-                    border-radius: 6px;
-                    padding: 10px;
-                }
-            """)
-            fallback_layout = QVBoxLayout(fallback_frame)
-            
-            fallback_title = QLabel("Job Distribution")
-            fallback_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
-            fallback_layout.addWidget(fallback_title)
-            
-            self.job_stats_label = QLabel("Charts not available")
-            self.job_stats_label.setStyleSheet("color: #e0e0e0; font-size: 11px; line-height: 1.5;")
-            self.job_stats_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-            self.job_stats_label.setMinimumHeight(150)
-            self.job_stats_label.setMaximumHeight(200)
-            fallback_layout.addWidget(self.job_stats_label)
-            
-            right_column.addWidget(fallback_frame)
-        
-        # Upcoming Deadlines (moved below chart with more space)
-        deadlines_frame = QFrame()
-        deadlines_frame.setStyleSheet("""
-            QFrame {
-                background-color: #2d2d30;
-                border: 1px solid #464647;
-                border-radius: 6px;
-                padding: 10px;
-            }
-        """)
-        deadlines_layout = QVBoxLayout(deadlines_frame)
-        
-        deadlines_title = QLabel("Upcoming Deadlines")
-        deadlines_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;")
-        deadlines_layout.addWidget(deadlines_title)
-        
-        # Deadlines scroll area with more space
-        self.deadlines_scroll = QScrollArea()
-        self.deadlines_scroll.setWidgetResizable(True)
-        self.deadlines_scroll.setMinimumHeight(300)
-        self.deadlines_scroll.setMaximumHeight(400)
-        self.deadlines_scroll.setStyleSheet("""
-            QScrollArea {
-                background-color: transparent;
-                border: none;
-            }
-            QScrollBar:vertical {
-                background-color: #2d2d30;
-                width: 10px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #464647;
-                border-radius: 5px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #5a5a5a;
-            }
-        """)
-        
-        self.deadlines_widget = QWidget()
-        self.deadlines_layout = QVBoxLayout(self.deadlines_widget)
-        self.deadlines_layout.setSpacing(8)
-        self.deadlines_scroll.setWidget(self.deadlines_widget)
-        
-        deadlines_layout.addWidget(self.deadlines_scroll)
-        right_column.addWidget(deadlines_frame, 1)  # Give it stretch priority
-        
+        self.calendar_widget = InteractiveCalendarWidget()
+        self.calendar_widget.setMinimumHeight(500)  # Increased height to use the deadlines space
+        self.calendar_widget.job_clicked.connect(self.open_job_details.emit)
+        right_column.addWidget(self.calendar_widget, 1)  # Allow calendar to expand
+
+        # Add right column to content layout
         content_layout.addLayout(right_column, 1)
         
         main_layout.addLayout(content_layout, 1)
@@ -613,14 +440,8 @@ class DashboardPageWidget(QWidget):
         # Update statistics
         self.update_statistics(active_jobs, archived_jobs)
         
-        # Update activity feed
-        self.update_activity_feed(active_jobs, archived_jobs)
-        
-        # Update upcoming deadlines
-        self.update_deadlines(active_jobs)
-        
-        # Update chart
-        self.update_chart(active_jobs)
+        # Update calendar (now shows all deadline information)
+        self.update_calendar(active_jobs)
     
     def load_active_jobs(self):
         """Load active jobs from directory structure (like job_page does)."""
@@ -688,7 +509,7 @@ class DashboardPageWidget(QWidget):
             except:
                 pass
                 
-            # Check for overdue jobs
+            # Check for overdue jobs (still track this for activity feed)
             due_date_str = job.get("Due Date", "")
             if due_date_str:
                 try:
@@ -740,214 +561,12 @@ class DashboardPageWidget(QWidget):
         else:
             qty_week_display = f"{completed_week_qty:,}"
         self.completed_qty_week_card.update_value(qty_week_display)
-        
-        # Overdue jobs count
-        self.overdue_jobs_card.update_value(overdue_count)
     
-    def update_activity_feed(self, active_jobs, archived_jobs):
-        """Update the activity feed with recent events."""
-        # Clear existing items
-        while self.activity_layout.count():
-            item = self.activity_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        activities = []
-        
-        # Add recent archives (last 7 days)
-        seven_days_ago = datetime.now() - timedelta(days=7)
-        for job in archived_jobs:
-            archived_date_str = job.get("dateArchived", "")
-            if archived_date_str:
-                try:
-                    archived_date = datetime.strptime(archived_date_str, "%Y-%m-%d %H:%M:%S")
-                    if archived_date >= seven_days_ago:
-                        time_diff = datetime.now() - archived_date
-                        if time_diff.days == 0:
-                            if time_diff.seconds < 3600:
-                                time_str = f"{time_diff.seconds // 60}m ago"
-                            else:
-                                time_str = f"{time_diff.seconds // 3600}h ago"
-                        else:
-                            time_str = f"{time_diff.days}d ago"
-                        
-                        ticket = job.get('Job Ticket#', job.get('Ticket#', 'N/A'))
-                        qty = job.get('Quantity', job.get('Qty', 'N/A'))
-                        activities.append({
-                            'icon': '✓',
-                            'text': f"{job.get('Customer', 'Unknown')} - PO#{job.get('PO#', 'N/A')} (Qty: {qty})",
-                            'timestamp': time_str,
-                            'color': '#27ae60',
-                            'date': archived_date,
-                            'priority': 2
-                        })
-                except:
-                    pass
-        
-        # Add overdue jobs with priority
-        today = datetime.now()
-        for job in active_jobs:
-            due_date_str = job.get("Due Date", "")
-            if due_date_str:
-                try:
-                    due_date = datetime.strptime(due_date_str, "%Y-%m-%d")
-                    days_diff = (due_date.date() - today.date()).days
-                    
-                    if days_diff < 0:  # Overdue
-                        qty = job.get('Quantity', job.get('Qty', 'N/A'))
-                        activities.append({
-                            'icon': '⚠',
-                            'text': f"{job.get('Customer', 'Unknown')} - PO#{job.get('PO#', 'N/A')} (Qty: {qty})",
-                            'timestamp': f"{abs(days_diff)}d overdue",
-                            'color': '#e74c3c',
-                            'date': due_date,
-                            'priority': 0
-                        })
-                    elif days_diff == 0:  # Due today
-                        qty = job.get('Quantity', job.get('Qty', 'N/A'))
-                        activities.append({
-                            'icon': '📅',
-                            'text': f"{job.get('Customer', 'Unknown')} - PO#{job.get('PO#', 'N/A')} (Qty: {qty})",
-                            'timestamp': "Due today",
-                            'color': '#f39c12',
-                            'date': due_date,
-                            'priority': 1
-                        })
-                    elif days_diff <= 3:  # Due soon
-                        qty = job.get('Quantity', job.get('Qty', 'N/A'))
-                        activities.append({
-                            'icon': '⏰',
-                            'text': f"{job.get('Customer', 'Unknown')} - PO#{job.get('PO#', 'N/A')} (Qty: {qty})",
-                            'timestamp': f"Due in {days_diff}d",
-                            'color': '#3498db',
-                            'date': due_date,
-                            'priority': 3
-                        })
-                except:
-                    pass
-        
-        # Add jobs with large quantities
-        for job in active_jobs:
-            qty_str = job.get("Quantity", job.get("Qty", "0"))
-            if isinstance(qty_str, str):
-                qty_str = qty_str.replace(',', '')
-            try:
-                qty = int(qty_str)
-                if qty >= 50000:  # Large orders
-                    activities.append({
-                        'icon': '📦',
-                        'text': f"Large order: {job.get('Customer', 'Unknown')} - {qty:,} units",
-                        'timestamp': f"PO#{job.get('PO#', 'N/A')}",
-                        'color': '#9b59b6',
-                        'date': datetime.now(),
-                        'priority': 4
-                    })
-            except:
-                pass
-        
-        # Sort activities by priority then date
-        activities.sort(key=lambda x: (x.get('priority', 99), x.get('date', datetime.min)), reverse=False)
-        
-        # Add activity items to layout (limit to 10 most important)
-        if activities:
-            for activity in activities[:10]:
-                item = ActivityItem(
-                    activity['icon'],
-                    activity['text'],
-                    activity['timestamp'],
-                    activity['color']
-                )
-                self.activity_layout.addWidget(item)
-        else:
-            # Show empty state
-            empty_label = QLabel("No recent activity")
-            empty_label.setStyleSheet("color: #666666; font-size: 12px; padding: 1px;")
-            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.activity_layout.addWidget(empty_label)
-        
-        # Add stretch at the end
-        self.activity_layout.addStretch()
+
     
-    def update_deadlines(self, active_jobs):
-        """Update upcoming deadlines list."""
-        # Clear existing items
-        while self.deadlines_layout.count():
-            item = self.deadlines_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        # Sort jobs by due date
-        jobs_with_dates = []
-        for job in active_jobs:
-            due_date_str = job.get("Due Date", "")
-            if due_date_str:
-                try:
-                    due_date = datetime.strptime(due_date_str, "%Y-%m-%d")
-                    jobs_with_dates.append((due_date, job))
-                except:
-                    pass
-        
-        jobs_with_dates.sort(key=lambda x: x[0])
-        
-        # Add deadline items (limit to next 10)
-        for due_date, job in jobs_with_dates[:10]:
-            item = DeadlineItem(job)
-            self.deadlines_layout.addWidget(item)
-        
-        # Add stretch at the end
-        self.deadlines_layout.addStretch()
-    
-    def update_chart(self, active_jobs):
-        """Update the job distribution pie chart."""
-        if CHARTS_AVAILABLE:
-            # Clear existing series
-            self.chart.removeAllSeries()
-            
-            # Count jobs by customer
-            customer_counts = {}
-            for job in active_jobs:
-                customer = job.get("Customer", "Unknown")
-                customer_counts[customer] = customer_counts.get(customer, 0) + 1
-            
-            if customer_counts:
-                # Create pie series
-                series = QPieSeries()
-                
-                # Add data to series
-                for customer, count in customer_counts.items():
-                    slice = series.append(f"{customer} ({count})", count)
-                    slice.setLabelVisible(True)
-                    slice.setLabelColor(QColor("#e0e0e0"))
-                
-                # Add series to chart
-                self.chart.addSeries(series)
-                
-                # Customize appearance
-                for slice in series.slices():
-                    slice.setLabelBrush(QBrush(QColor("#e0e0e0")))
-                    slice.setLabelFont(QFont("Arial", 8))
-            else:
-                # Show empty state
-                series = QPieSeries()
-                series.append("No Active Jobs", 1)
-                self.chart.addSeries(series)
-        else:
-            # Update text-based stats when charts are not available
-            if hasattr(self, 'job_stats_label'):
-                customer_counts = {}
-                for job in active_jobs:
-                    customer = job.get("Customer", "Unknown")
-                    customer_counts[customer] = customer_counts.get(customer, 0) + 1
-                
-                if customer_counts:
-                    stats_text = "Job Distribution:\n\n"
-                    total = sum(customer_counts.values())
-                    for customer, count in sorted(customer_counts.items(), key=lambda x: x[1], reverse=True):
-                        percentage = (count / total) * 100
-                        stats_text += f"{customer}: {count} ({percentage:.1f}%)\n"
-                    self.job_stats_label.setText(stats_text)
-                else:
-                    self.job_stats_label.setText("No active jobs")
+    def update_calendar(self, active_jobs):
+        """Update the interactive calendar with job data."""
+        self.calendar_widget.set_jobs_data(active_jobs)
     
     def open_database_generator(self):
         """Open the Database Generator tool from dashboard."""

@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 import fitz
 import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
-from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer
+from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer, QThread, QObject
 from src.wizards.new_job_wizard import NewJobWizard
 from src.widgets.job_details_dialog import JobDetailsDialog, EPCProgressDialog, FileOperationProgressDialog, PDFProgressDialog
 from src.widgets.interactive_roll_tracker_dialog import InteractiveRollTrackerDialog
@@ -43,6 +43,52 @@ from src.utils.roll_tracker import generate_quality_control_sheet
 import re
 
 
+class JobLoaderWorker(QObject):
+    """Worker to load job data from the filesystem in a background thread."""
+    jobs_loaded = Signal(list)
+    error = Signal(str)
+
+    def __init__(self, source_dir):
+        super().__init__()
+        self.source_dir = source_dir
+        self.is_cancelled = False
+
+    def run(self):
+        """Scan the source directory for job_data.json files."""
+        jobs = []
+        if not os.path.exists(self.source_dir):
+            self.error.emit(f"Source directory not found: {self.source_dir}")
+            return
+
+        try:
+            for root, _, files in os.walk(self.source_dir):
+                if self.is_cancelled:
+                    return
+
+                if "job_data.json" in files:
+                    job_data_path = os.path.join(root, "job_data.json")
+                    try:
+                        with open(job_data_path, "r", encoding="utf-8") as f:
+                            job_data = json.load(f)
+                        
+                        # Add the canonical path from the filesystem
+                        job_data["active_source_folder_path"] = root
+                        jobs.append(job_data)
+                    except json.JSONDecodeError:
+                        print(f"Error decoding JSON from {job_data_path}")
+                    except Exception as e:
+                        print(f"Error loading job from {job_data_path}: {e}")
+            
+            if not self.is_cancelled:
+                self.jobs_loaded.emit(jobs)
+
+        except Exception as e:
+            self.error.emit(f"Failed to scan job directory: {e}")
+
+    def cancel(self):
+        self.is_cancelled = True
+
+
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
 
@@ -52,6 +98,7 @@ class JobPageWidget(QWidget):
         self.save_file = os.path.join(self.base_path, "data", "active_jobs.json")
         self.network_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
         self.all_jobs = []  # This will be the source of truth
+        self.is_loading = False # Flag to prevent concurrent loads
 
         # Initialize file system watcher for real-time monitoring
         self.file_watcher = QFileSystemWatcher()
@@ -192,18 +239,8 @@ class JobPageWidget(QWidget):
         """Setup limited monitoring for network drives to avoid performance issues."""
         print("Setting up LIMITED network monitoring (performance mode)")
         
-        # Only monitor the root directory, not subdirectories
-        if active_source_dir not in self.file_watcher.directories():
-            success = self.file_watcher.addPath(active_source_dir)
-            if success:
-                print(f"Monitoring root directory only: {active_source_dir}")
-            else:
-                print(f"Failed to monitor: {active_source_dir}")
-        
-        # Use longer debounce timer for network drives (2x normal setting)
-        network_debounce = max(config.REFRESH_DEBOUNCE_MS * 2, 2000)
-        self.refresh_timer.setInterval(network_debounce)
-        print(f"Network debounce timer set to: {network_debounce}ms")
+        # DO NOT use the file watcher for network drives, it's unreliable and slow.
+        # Rely on periodic refresh and manual refresh instead.
         
         # Schedule periodic refresh for network drives
         if not hasattr(self, 'periodic_refresh_timer'):
@@ -273,27 +310,7 @@ class JobPageWidget(QWidget):
     def manual_refresh_jobs(self):
         """Manually refresh the jobs table - useful when monitoring is disabled or unreliable."""
         print("=== Manual refresh triggered by user ===")
-        
-        # Show brief status message
-        from PySide6.QtWidgets import QApplication
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        
-        try:
-            old_count = len(self.all_jobs)
-            self.load_jobs()
-            new_count = len(self.all_jobs)
-            
-            print(f"Manual refresh complete: {old_count} -> {new_count} jobs")
-            
-            # Show brief feedback in status (if you have a status bar)
-            # For now, just log the result
-            if new_count != old_count:
-                print(f"Jobs updated: found {new_count} jobs (was {old_count})")
-            else:
-                print(f"No changes: {new_count} jobs found")
-                
-        finally:
-            QApplication.restoreOverrideCursor()
+        self.load_jobs_in_background()
 
     def periodic_refresh(self):
         """Periodic refresh for network drives where file system watching is unreliable."""
@@ -315,31 +332,7 @@ class JobPageWidget(QWidget):
     def refresh_jobs_table(self):
         """Refresh the jobs table by reloading data from the file system."""
         print("=== Refreshing jobs table due to file system changes ===")
-
-        # Store current selection if any
-        current_selection = None
-        selection_model = self.jobs_table.selectionModel()
-        if selection_model.hasSelection():
-            selected_row = selection_model.selectedRows()[0].row()
-            if 0 <= selected_row < len(self.all_jobs):
-                current_job = self.all_jobs[selected_row]
-                current_selection = (
-                    self.get_job_data_value(current_job, "Ticket#", "Job Ticket#"),
-                    current_job.get("PO#"),
-                )
-                print(f"Preserving selection: {current_selection}")
-
-        # Reload jobs from directory
-        old_count = len(self.all_jobs)
-        self.load_jobs()
-        new_count = len(self.all_jobs)
-
-        print(f"Job count changed from {old_count} to {new_count}")
-
-        # Restore selection if possible
-        if current_selection:
-            self.restore_table_selection(current_selection)
-            print("Selection restored")
+        self.load_jobs_in_background()
 
     def restore_table_selection(self, job_identifiers):
         """Restore table selection based on job ticket and PO number."""
@@ -564,36 +557,84 @@ class JobPageWidget(QWidget):
         Loads jobs by scanning the ACTIVE_JOBS_SOURCE_DIR for job_data.json files.
         This is now the single source of truth for active jobs on startup.
         """
+        # This method now starts the background loading process.
+        self.load_jobs_in_background()
+
+    def load_jobs_in_background(self):
+        """Loads jobs in a background thread to prevent UI freezing."""
+        if self.is_loading:
+            print("Job loading already in progress. Skipping.")
+            return
+
+        print("Starting background job load...")
+        self.is_loading = True
+        self.refresh_button.setEnabled(False)
+        self.refresh_button.setText("Refreshing...")
+
+        active_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
+        
+        # Setup worker thread
+        self.load_thread = QThread()
+        self.worker = JobLoaderWorker(active_source_dir)
+        self.worker.moveToThread(self.load_thread)
+        
+        # Connect signals
+        self.load_thread.started.connect(self.worker.run)
+        self.worker.jobs_loaded.connect(self.on_jobs_loaded)
+        self.worker.error.connect(self.on_load_error)
+        
+        # Clean up thread
+        self.worker.jobs_loaded.connect(self.load_thread.quit)
+        self.worker.error.connect(self.load_thread.quit)
+        self.load_thread.finished.connect(self.load_thread.deleteLater)
+        self.worker.jobs_loaded.connect(self.worker.deleteLater)
+
+        # Start the thread
+        self.load_thread.start()
+
+    def on_jobs_loaded(self, loaded_jobs):
+        """Slot to handle the list of jobs loaded by the worker thread."""
+        print(f"Background load complete. Found {len(loaded_jobs)} jobs.")
+
+        # Preserve selection
+        current_selection = None
+        selection_model = self.jobs_table.selectionModel()
+        if selection_model.hasSelection():
+            selected_row = selection_model.selectedRows()[0].row()
+            if 0 <= selected_row < len(self.all_jobs):
+                current_job = self.all_jobs[selected_row]
+                current_selection = (
+                    self.get_job_data_value(current_job, "Ticket#", "Job Ticket#"),
+                    current_job.get("PO#"),
+                )
+
+        # Clear existing data
         self.all_jobs = []
         self.model.removeRows(0, self.model.rowCount())
 
-        active_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
-        if not os.path.exists(active_source_dir):
-            print(
-                f"Active jobs source directory not found, creating it: {active_source_dir}"
-            )
-            os.makedirs(active_source_dir)
-            return
+        # Add jobs to table (with duplicate checks)
+        for job_data in loaded_jobs:
+            self.add_job_to_table(job_data)
+        
+        # Restore selection
+        if current_selection:
+            self.restore_table_selection(current_selection)
+        
+        self.on_load_finished()
 
-        for root, _, files in os.walk(active_source_dir):
-            if "job_data.json" in files:
-                job_data_path = os.path.join(root, "job_data.json")
-                try:
-                    with open(job_data_path, "r", encoding="utf-8") as f:
-                        job_data = json.load(f)
+    def on_load_error(self, error_message):
+        """Slot to handle errors from the worker thread."""
+        print(f"Error loading jobs: {error_message}")
+        QMessageBox.warning(self, "Load Error", f"Could not load jobs:\n{error_message}")
+        self.on_load_finished()
 
-                    # The path in the json might be from another system.
-                    # The folder it resides in is the canonical path for the active source copy.
-                    job_data["active_source_folder_path"] = root
-
-                    # The primary path is also stored in the json, which is what we want.
-                    self.add_job_to_table(job_data)
-
-                except json.JSONDecodeError:
-                    print(f"Error decoding JSON from {job_data_path}")
-                except Exception as e:
-                    print(f"Error loading job from {job_data_path}: {e}")
-
+    def on_load_finished(self):
+        """Common cleanup after loading finishes or fails."""
+        self.is_loading = False
+        self.refresh_button.setEnabled(True)
+        self.refresh_button.setText("Refresh Jobs")
+        print("Job loading process finished.")
+        
     def save_data(self):
         """
         This function is deprecated. Job data is now managed directly as files

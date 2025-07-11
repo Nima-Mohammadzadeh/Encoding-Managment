@@ -27,6 +27,7 @@ from src.tabs.settings_page import SettingsPageWidget
 from src.tabs.dashboard_page import DashboardPageWidget
 from src.tabs.reports_page import ReportsPageWidget
 from src.tabs.tools_page import ToolsPageWidget
+from src.widgets.job_details_dialog import JobDetailsDialog
 import src.config as config
 from src.utils.file_utils import resource_path
 
@@ -298,6 +299,7 @@ class MainWindow(QMainWindow):
         self.dashboard_page.navigate_to_tools.connect(lambda: self.switch_page(2))
         self.dashboard_page.navigate_to_reports.connect(lambda: self.switch_page(3))
         self.dashboard_page.create_new_job.connect(self.handle_create_new_job)
+        self.dashboard_page.open_job_details.connect(self.handle_open_job_details)
 
         # Set central widget
         central_widget = QWidget()
@@ -330,6 +332,25 @@ class MainWindow(QMainWindow):
         """Handle create new job from dashboard - switch to jobs page and open wizard."""
         self.switch_page(1)  # Switch to jobs page
         self.jobs_page.open_new_job_wizard()  # Open the new job wizard
+
+    def handle_open_job_details(self, job_data):
+        """Handle opening the job details dialog from anywhere in the app."""
+        details_dialog = JobDetailsDialog(job_data, self.base_path, self)
+        details_dialog.job_updated.connect(self.handle_job_updated)
+        details_dialog.job_archived.connect(self.handle_job_archived)
+        details_dialog.exec()
+
+    def handle_job_updated(self, updated_job_data):
+        """Handle the job_updated signal from JobDetailsDialog."""
+        self.jobs_page.refresh_jobs_table()
+        self.dashboard_page.refresh_dashboard()
+        self.archive_page.load_jobs()
+
+    def handle_job_archived(self, job_data):
+        """Handle the job_archived signal from JobDetailsDialog."""
+        self.archive_page.add_archived_job(job_data)
+        self.jobs_page.refresh_jobs_table()
+        self.dashboard_page.refresh_dashboard()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

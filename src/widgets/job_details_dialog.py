@@ -166,20 +166,42 @@ class JobDetailsDialog(QDialog):
         layout.addLayout(checklist_layout)
 
     def open_checklist(self):
-        """Open the job checklist PDF in the default browser."""
+        """Open the job checklist PDF using the default system viewer."""
         job_path = self.find_job_directory()
         if not job_path:
             QMessageBox.warning(self, "Checklist Not Found", "Job directory not found.")
             return
 
         try:
-            for filename in os.listdir(job_path):
-                if "checklist" in filename.lower() and filename.lower().endswith(".pdf"):
-                    checklist_path = os.path.join(job_path, filename)
-                    self.open_pdf_in_browser(checklist_path)
-                    return
+            # Generate the expected filename to find it more reliably
+            customer = self.job_data.get('Customer', '')
+            ticket = self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', ''))
+            po = self.job_data.get('PO#', '')
             
-            QMessageBox.warning(self, "Checklist Not Found", "No checklist PDF found in the job directory.")
+            # This is the standard name format from the checklist creation logic
+            expected_filename = f"{customer}-{ticket}-{po}-Checklist.pdf".lower()
+            
+            # Search for a file that matches the pattern, case-insensitively
+            found_checklist = None
+            for filename in os.listdir(job_path):
+                if filename.lower() == expected_filename:
+                    found_checklist = os.path.join(job_path, filename)
+                    break # Exact match found
+            
+            # If no exact match, fall back to the original looser search
+            if not found_checklist:
+                for filename in os.listdir(job_path):
+                    if "checklist" in filename.lower() and filename.lower().endswith(".pdf"):
+                        found_checklist = os.path.join(job_path, filename)
+                        break
+
+            if found_checklist:
+                self.open_path_in_explorer(found_checklist)
+            else:
+                QMessageBox.warning(self, "Checklist Not Found", 
+                                  "No checklist PDF found in the job directory.\n\n"
+                                  "You can try to regenerate it from the 'File Manager' tab.")
+
         except (OSError, PermissionError) as e:
             QMessageBox.critical(self, "Error", f"Could not access job directory: {e}")
 
@@ -486,32 +508,28 @@ class JobDetailsDialog(QDialog):
         
         # Open the file
         if os.path.exists(file_path):
-            if file_path.lower().endswith('.pdf'):
-                self.open_pdf_in_browser(file_path)
-            elif file_path.lower().endswith(('.xlsx', '.xls')):
-                # Open Excel files with default application
-                self.open_path_in_explorer(file_path)
-            else:
                 self.open_path_in_explorer(file_path)
         else:
             QMessageBox.warning(self, "File Not Found", f"File does not exist: {file_path}")
 
-    def open_pdf_in_browser(self, pdf_path):
-        try:
-            webbrowser.open(f"file:///{os.path.abspath(pdf_path)}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not open PDF: {e}")
-
     def open_path_in_explorer(self, path):
         try:
+            # Use os.path.normpath to ensure the path format is correct for the OS
+            normalized_path = os.path.normpath(path)
+            
+            if not os.path.exists(normalized_path):
+                QMessageBox.warning(self, "File Not Found", f"The specified file does not exist:\n{normalized_path}")
+                return
+
             if platform.system() == "Windows":
-                os.startfile(path)
-            elif platform.system() == "Darwin":
-                subprocess.run(["open", path])
-            else:
-                subprocess.run(["xdg-open", path])
+                # os.startfile is the most reliable way on Windows
+                os.startfile(normalized_path)
+            elif platform.system() == "Darwin": # macOS
+                subprocess.run(["open", normalized_path])
+            else: # Linux and other Unix-like systems
+                subprocess.run(["xdg-open", normalized_path])
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not open path: {e}")
+            QMessageBox.critical(self, "Error", f"Could not open path '{path}':\n{e}")
     
     def archive_job(self):
         reply = QMessageBox.question(self, "Archive Job",
