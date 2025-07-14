@@ -70,7 +70,7 @@ class CollapsibleNavigationPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_collapsed = False
-        self.expanded_width = 200
+        self.expanded_width = 180
         self.collapsed_width = 60  # Adjusted for better spacing and icon visibility
         
         self.setFixedWidth(self.expanded_width)
