@@ -1,0 +1,30 @@
+
+File Templates Should follow this pathing 
+
+Label Size -> Customer -> UPC (If no size- Read out stating "Template creation Required") 
+This would help get rid of the files changing from person to person when making new jobs and help from having more "Locking Issues" 
+
+Need Added is the QTY with the overage so if needed we can pull and stage the correct amount of mats.
+
+Need to add a print page for checklist for QA and Roll Tracker (Multi Selection) 
+
+Need to add a layout button that would then select from basic template if the customer template doesn't exist 
+	(Based on our customers stock items) 
+
+Need to add / Pong for Very important update Coming Soon!
+
+Current Bugs: 
+Refreshing Timer / Causing Lag
+Monitoring Log
+File Manager View
+Edit Job Table
+Regen After Edit Fix (Checklist Ending Serial) 
+Customer Sort visual update
+Serial Number Changes Daily
+
+
+
+#####Jobs tab######
+refine jobs tab, have multiple sub pages within this tabs page for viewing the full backlog of jobs, active jobs in the room , and roll tracking to view many roll tracker at once.
+
+
