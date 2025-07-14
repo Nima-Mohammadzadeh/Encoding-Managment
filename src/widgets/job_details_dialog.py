@@ -7,7 +7,8 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QTextEdit, QComboBox, QListWidget,
-    QTabWidget, QWidget, QMessageBox, QGridLayout, QLineEdit, QProgressDialog
+    QTabWidget, QWidget, QMessageBox, QGridLayout, QLineEdit, QProgressDialog,
+    QTreeWidget, QTreeWidgetItem, QSplitter, QFrame, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal, QThread, QTimer
 from PySide6.QtGui import QFont, QIcon
@@ -29,9 +30,11 @@ class JobDetailsDialog(QDialog):
         self.network_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
         
         self.setWindowTitle(f"Job Details: {job_data.get('Job Ticket#', 'N/A')}")
-        self.setMinimumSize(700, 600)
+        self.setMinimumSize(700, 500)
+        self.resize(800, 550)
         self.setModal(True)
-        self.setStyleSheet(self.get_stylesheet())
+        # Remove custom stylesheet to inherit application theme
+        # self.setStyleSheet(self.get_stylesheet())
         
         self.job_fields_read = {}
         self.encoding_fields_read = {}
@@ -45,178 +48,394 @@ class JobDetailsDialog(QDialog):
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        # Header
-        header = self.create_header()
+        # Enhanced Header with Job Details at a Glance
+        header = self.create_enhanced_header()
         main_layout.addWidget(header)
         
-        # Tab Widget
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setObjectName("mainTabWidget")
-        main_layout.addWidget(self.tab_widget)
-
-        # Create and add tabs
-        self.overview_tab = QWidget()
-        self.file_manager_tab = QWidget()
+        # Main Content Area with Splitter
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(splitter)
         
-        self.tab_widget.addTab(self.overview_tab, "Job Overview")
-        self.tab_widget.addTab(self.file_manager_tab, "File Manager")
+        # Left Panel: Job Information and Actions
+        left_panel = self.create_left_panel()
+        splitter.addWidget(left_panel)
         
-        self.populate_overview_tab()
-        self.populate_file_manager_tab()
+        # Right Panel: File Explorer
+        right_panel = self.create_right_panel()
+        splitter.addWidget(right_panel)
         
-    def create_header(self):
+        # Set splitter proportions (55% left, 45% right) for smaller window
+        splitter.setSizes([440, 360])
+        
+    def create_enhanced_header(self):
+        """Create an enhanced header with comprehensive job details at a glance."""
         header_widget = QWidget()
         header_widget.setObjectName("headerWidget")
-        layout = QGridLayout(header_widget)
+        header_widget.setMinimumHeight(100)
+        header_widget.setMaximumHeight(100)
         
-        # Job Title
-        title_text = f"{self.job_data.get('Customer', 'Unknown Cust.')} - {self.job_data.get('Part#', 'N/A')}"
+        layout = QGridLayout(header_widget)
+        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setSpacing(8)
+        
+        # Row 1: Job Title and Status
+        title_text = f"{self.job_data.get('Customer', 'Unknown Customer')} - {self.job_data.get('Part#', 'N/A')}"
         title_label = QLabel(title_text)
         title_label.setObjectName("headerTitle")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
+        title_label.setWordWrap(True)
         layout.addWidget(title_label, 0, 0, 1, 3)
         
-        # Status
         status_label = QLabel(f"Status: {self.job_data.get('Status', 'New')}")
         status_label.setObjectName("headerStatus")
-        layout.addWidget(status_label, 1, 0, 1, 3)
+        status_label.setStyleSheet("font-size: 12px; color: #ffffff; font-weight: bold;")
+        layout.addWidget(status_label, 0, 3, 1, 2)
         
-        # Action Buttons
+        # Row 2: Key Job Details
+        ticket_label = QLabel(f"Ticket#: {self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', 'N/A'))}")
+        ticket_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
+        po_label = QLabel(f"PO#: {self.job_data.get('PO#', 'N/A')}")
+        po_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
+        qty_label = QLabel(f"Quantity: {self.job_data.get('Quantity', self.job_data.get('Qty', 'N/A'))}")
+        qty_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
+        
+        layout.addWidget(ticket_label, 1, 0)
+        layout.addWidget(po_label, 1, 1)
+        layout.addWidget(qty_label, 1, 2)
+        
+        # Row 3: Additional Details
+        due_date = self.job_data.get('Due Date', 'N/A')
+        if due_date and due_date != 'N/A':
+            try:
+                # Format date for display
+                date_obj = datetime.strptime(due_date, "%Y-%m-%d")
+                formatted_date = date_obj.strftime("%m/%d/%Y")
+                due_label = QLabel(f"Due: {formatted_date}")
+            except:
+                due_label = QLabel(f"Due: {due_date}")
+        else:
+            due_label = QLabel("Due: N/A")
+        due_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
+            
+        upc_label = QLabel(f"UPC: {self.job_data.get('UPC Number', 'N/A')}")
+        upc_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
+        label_size_label = QLabel(f"Label Size: {self.job_data.get('Label Size', 'N/A')}")
+        label_size_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
+        
+        layout.addWidget(due_label, 2, 0)
+        layout.addWidget(upc_label, 2, 1)
+        layout.addWidget(label_size_label, 2, 2)
+        
+        # Action Buttons (Right side)
+        button_layout = QVBoxLayout()
+        button_layout.setSpacing(4)
+        
         self.edit_btn = QPushButton("Edit Job")
+        self.edit_btn.setMaximumHeight(30)
         self.edit_btn.clicked.connect(self.enter_edit_mode)
-        layout.addWidget(self.edit_btn, 0, 3)
+        button_layout.addWidget(self.edit_btn)
         
         complete_btn = QPushButton("Complete Job")
+        complete_btn.setMaximumHeight(30)
         complete_btn.clicked.connect(self.complete_job)
-        layout.addWidget(complete_btn, 1, 3)
+        button_layout.addWidget(complete_btn)
 
         archive_btn = QPushButton("Archive Job")
+        archive_btn.setMaximumHeight(30)
         archive_btn.clicked.connect(self.archive_job)
-        layout.addWidget(archive_btn, 0, 4)
+        button_layout.addWidget(archive_btn)
 
         delete_btn = QPushButton("Delete Job")
         delete_btn.setObjectName("deleteButton")
+        delete_btn.setProperty("class", "danger")  # Use qt_material danger styling
+        delete_btn.setMaximumHeight(30)
         delete_btn.clicked.connect(self.delete_job)
-        layout.addWidget(delete_btn, 1, 4)
+        button_layout.addWidget(delete_btn)
 
+        layout.addLayout(button_layout, 0, 4, 3, 1)
+        
+        # Set column stretch to make details expand
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
         layout.setColumnStretch(2, 1)
+        layout.setColumnStretch(3, 0)
+        layout.setColumnStretch(4, 0)
+        
         return header_widget
         
-    def populate_overview_tab(self):
-        layout = QHBoxLayout(self.overview_tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+    def create_left_panel(self):
+        """Create the left panel with job information and actions."""
+        # Create scroll area for the left panel
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        # Job Details Group
-        job_details_group = QGroupBox("Job Information")
-        form_layout = QFormLayout(job_details_group)
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setSpacing(12)
+        
+        # Job Information Group
+        job_info_group = QGroupBox("Job Information")
+        job_info_layout = QFormLayout(job_info_group)
+        job_info_layout.setSpacing(8)
+        job_info_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        job_info_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        
         job_field_keys = ["Customer", "Part#", "Job Ticket#", "PO#", "Inlay Type", "Label Size", "Quantity", "Due Date"]
         for key in job_field_keys:
             label = QLabel(f"{key}:")
+            label.setStyleSheet("color: #ffffff; font-weight: normal; min-width: 80px;")
+            label.setMinimumWidth(80)
             value = QLabel(self.job_data.get(key, ''))
             value.setObjectName("readOnlyField")
-            form_layout.addRow(label, value)
+            # Apply styling for read-only fields to ensure visibility in dark theme
+            value.setStyleSheet("""
+                padding: 6px;
+                border: 1px solid #4f5b62;
+                border-radius: 4px;
+                background-color: #31363b;
+                color: #ffffff;
+                font-weight: normal;
+                min-width: 120px;
+            """)
+            value.setMinimumWidth(120)
+            job_info_layout.addRow(label, value)
             self.job_fields_read[key] = value
-        layout.addWidget(job_details_group)
         
-        # Encoding Details Group
-        encoding_details_group = QGroupBox("Encoding Information")
-        encoding_form_layout = QFormLayout(encoding_details_group)
+        left_layout.addWidget(job_info_group)
+        
+        # Encoding Information Group
+        encoding_info_group = QGroupBox("Encoding Information")
+        encoding_layout = QFormLayout(encoding_info_group)
+        encoding_layout.setSpacing(8)
+        encoding_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        encoding_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        
         encoding_field_keys = ["Item", "UPC Number", "Serial Number", "LPR", "Rolls"]
         for key in encoding_field_keys:
             label = QLabel(f"{key}:")
+            label.setStyleSheet("color: #ffffff; font-weight: normal; min-width: 80px;")
+            label.setMinimumWidth(80)
             value = QLabel(self.job_data.get(key, ''))
             value.setObjectName("readOnlyField")
-            encoding_form_layout.addRow(label, value)
+            # Apply styling for read-only fields to ensure visibility in dark theme
+            value.setStyleSheet("""
+                padding: 6px;
+                border: 1px solid #4f5b62;
+                border-radius: 4px;
+                background-color: #31363b;
+                color: #ffffff;
+                font-weight: normal;
+                min-width: 120px;
+            """)
+            value.setMinimumWidth(120)
+            encoding_layout.addRow(label, value)
             self.encoding_fields_read[key] = value
-        layout.addWidget(encoding_details_group)
         
-    def populate_file_manager_tab(self):
-        layout = QVBoxLayout(self.file_manager_tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        left_layout.addWidget(encoding_info_group)
         
-        # Directory Status
-        self.dir_status_label = QLabel("Checking directories...")
-        layout.addWidget(self.dir_status_label)
+        # Job Actions Group
+        actions_group = QGroupBox("Job Actions")
+        actions_layout = QVBoxLayout(actions_group)
+        actions_layout.setSpacing(8)
         
         # Directory Actions
         dir_actions_layout = QHBoxLayout()
         self.open_dir_btn = QPushButton("Open Job Folder")
+        self.open_dir_btn.setMaximumHeight(30)
         self.open_dir_btn.clicked.connect(self.open_job_folder)
         self.create_dir_btn = QPushButton("Create Job Folder")
+        self.create_dir_btn.setMaximumHeight(30)
         self.create_dir_btn.clicked.connect(self.create_job_directory)
         dir_actions_layout.addWidget(self.open_dir_btn)
         dir_actions_layout.addWidget(self.create_dir_btn)
-        dir_actions_layout.addStretch()
-        layout.addLayout(dir_actions_layout)
-
-        # File List
-        self.files_list = QListWidget()
-        self.files_list.doubleClicked.connect(self.open_selected_file)
-        layout.addWidget(self.files_list)
+        actions_layout.addLayout(dir_actions_layout)
+        
+        # Directory Status
+        self.dir_status_label = QLabel("Checking directories...")
+        self.dir_status_label.setWordWrap(True)
+        self.dir_status_label.setStyleSheet("padding: 4px; font-size: 11px;")
+        actions_layout.addWidget(self.dir_status_label)
         
         # Checklist Actions
         checklist_layout = QHBoxLayout()
         open_checklist_btn = QPushButton("Open Checklist PDF")
+        open_checklist_btn.setMaximumHeight(30)
         open_checklist_btn.clicked.connect(self.open_checklist)
         regen_checklist_btn = QPushButton("Regenerate Checklist")
+        regen_checklist_btn.setMaximumHeight(30)
         regen_checklist_btn.clicked.connect(self.regenerate_checklist)
         checklist_layout.addWidget(open_checklist_btn)
         checklist_layout.addWidget(regen_checklist_btn)
-        checklist_layout.addStretch()
-        layout.addLayout(checklist_layout)
-
-    def open_checklist(self):
-        """Open the job checklist PDF using the default system viewer."""
+        actions_layout.addLayout(checklist_layout)
+        
+        left_layout.addWidget(actions_group)
+        left_layout.addStretch()
+        
+        # Set the widget in the scroll area
+        left_scroll.setWidget(left_widget)
+        return left_scroll
+        
+    def create_right_panel(self):
+        """Create the right panel with hierarchical file explorer."""
+        # Create scroll area for the right panel
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(10, 10, 10, 10)
+        right_layout.setSpacing(8)
+        
+        # File Explorer Header
+        explorer_header = QLabel("Job Files & Folders")
+        explorer_header.setObjectName("explorerHeader")
+        explorer_header.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff; padding: 5px 0px;")
+        right_layout.addWidget(explorer_header)
+        
+        # File Explorer Tree
+        self.file_tree = QTreeWidget()
+        self.file_tree.setHeaderLabel("Name")
+        self.file_tree.setAlternatingRowColors(True)
+        self.file_tree.setExpandsOnDoubleClick(True)
+        self.file_tree.itemDoubleClicked.connect(self.on_tree_item_double_clicked)
+        self.file_tree.setMinimumWidth(200)
+        self.file_tree.setMinimumHeight(300)
+        right_layout.addWidget(self.file_tree)
+        
+        # Refresh Button
+        refresh_btn = QPushButton("Refresh File Explorer")
+        refresh_btn.setMaximumHeight(30)
+        refresh_btn.clicked.connect(self.refresh_file_tree)
+        right_layout.addWidget(refresh_btn)
+        
+        # Set the widget in the scroll area
+        right_scroll.setWidget(right_widget)
+        return right_scroll
+        
+    def refresh_file_tree(self):
+        """Refresh the file explorer tree."""
+        self.file_tree.clear()
         job_path = self.find_job_directory()
-        if not job_path:
-            QMessageBox.warning(self, "Checklist Not Found", "Job directory not found.")
-            return
-
+        if job_path:
+            self.populate_file_tree(job_path)
+        else:
+            # Add a placeholder item
+            placeholder = QTreeWidgetItem(self.file_tree)
+            placeholder.setText(0, "Job directory not found")
+            placeholder.setDisabled(True)
+            
+    def populate_file_tree(self, root_path):
+        """Populate the file tree with the job directory structure."""
         try:
-            # Generate the expected filename to find it more reliably
-            customer = self.job_data.get('Customer', '')
-            ticket = self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', ''))
-            po = self.job_data.get('PO#', '')
+            # Add root item
+            root_item = QTreeWidgetItem(self.file_tree)
+            root_item.setText(0, os.path.basename(root_path))
+            root_item.setIcon(0, self.get_folder_icon())
+            root_item.setExpanded(True)
             
-            # This is the standard name format from the checklist creation logic
-            expected_filename = f"{customer}-{ticket}-{po}-Checklist.pdf".lower()
+            # Recursively add files and folders
+            self.add_directory_to_tree(root_path, root_item)
             
-            # Search for a file that matches the pattern, case-insensitively
-            found_checklist = None
-            for filename in os.listdir(job_path):
-                if filename.lower() == expected_filename:
-                    found_checklist = os.path.join(job_path, filename)
-                    break # Exact match found
+        except Exception as e:
+            error_item = QTreeWidgetItem(self.file_tree)
+            error_item.setText(0, f"Error loading directory: {e}")
+            error_item.setDisabled(True)
             
-            # If no exact match, fall back to the original looser search
-            if not found_checklist:
-                for filename in os.listdir(job_path):
-                    if "checklist" in filename.lower() and filename.lower().endswith(".pdf"):
-                        found_checklist = os.path.join(job_path, filename)
-                        break
-
-            if found_checklist:
-                self.open_path_in_explorer(found_checklist)
+    def add_directory_to_tree(self, dir_path, parent_item):
+        """Recursively add directory contents to the tree."""
+        try:
+            for item_name in sorted(os.listdir(dir_path)):
+                item_path = os.path.join(dir_path, item_name)
+                
+                tree_item = QTreeWidgetItem(parent_item)
+                tree_item.setText(0, item_name)
+                
+                if os.path.isdir(item_path):
+                    tree_item.setIcon(0, self.get_folder_icon())
+                    # Recursively add subdirectory contents
+                    self.add_directory_to_tree(item_path, tree_item)
             else:
-                QMessageBox.warning(self, "Checklist Not Found", 
-                                  "No checklist PDF found in the job directory.\n\n"
-                                  "You can try to regenerate it from the 'File Manager' tab.")
-
-        except (OSError, PermissionError) as e:
-            QMessageBox.critical(self, "Error", f"Could not access job directory: {e}")
+                    tree_item.setIcon(0, self.get_file_icon(item_name))
+                    
+        except PermissionError:
+            error_item = QTreeWidgetItem(parent_item)
+            error_item.setText(0, "Access Denied")
+            error_item.setDisabled(True)
+        except Exception as e:
+            error_item = QTreeWidgetItem(parent_item)
+            error_item.setText(0, f"Error: {e}")
+            error_item.setDisabled(True)
+            
+    def get_folder_icon(self):
+        """Get folder icon for tree items."""
+        # You can customize this with actual icons if available
+        return QIcon()
+        
+    def get_file_icon(self, filename):
+        """Get appropriate file icon based on file extension."""
+        # You can customize this with actual icons if available
+        return QIcon()
+        
+    def on_tree_item_double_clicked(self, item, column):
+        """Handle double-click on tree items."""
+        if item.parent() is None:  # Root item
+            return
+            
+        # Get the full path of the selected item
+        item_path = self.get_item_path(item)
+        if item_path and os.path.isfile(item_path):
+            self.open_path_in_explorer(item_path)
+            
+    def get_item_path(self, item):
+        """Get the full file system path for a tree item."""
+        path_parts = []
+        current_item = item
+        
+        # Walk up the tree to build the path
+        while current_item.parent() is not None:
+            path_parts.insert(0, current_item.text(0))
+            current_item = current_item.parent()
+            
+        # Add the root path
+        job_path = self.find_job_directory()
+        if job_path:
+            return os.path.join(job_path, *path_parts)
+        return None
 
     def enter_edit_mode(self):
+        """Enter edit mode by creating a new tab."""
         # Create edit tab if it doesn't exist
-        if self.tab_widget.count() == 2:
+        if not hasattr(self, 'edit_tab'):
             self.edit_tab = QWidget()
             self.populate_edit_tab()
-            self.tab_widget.addTab(self.edit_tab, "Edit Job")
+            
+            # Create a new tab widget for edit mode
+            self.edit_tab_widget = QTabWidget()
+            self.edit_tab_widget.addTab(self.edit_tab, "Edit Job")
+            
+            # Replace the main layout with the edit tab widget
+            self.layout().itemAt(1).widget().setParent(None)  # Remove splitter
+            self.layout().addWidget(self.edit_tab_widget, 1)
         
-        self.tab_widget.setCurrentIndex(2)
+        self.edit_tab_widget.setCurrentIndex(0)
 
     def populate_edit_tab(self):
-        layout = QVBoxLayout(self.edit_tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        # Create scroll area for edit mode
+        edit_scroll = QScrollArea()
+        edit_scroll.setWidgetResizable(True)
+        edit_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        edit_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        edit_widget = QWidget()
+        layout = QVBoxLayout(edit_widget)
+        layout.setContentsMargins(10, 10, 10, 10)
 
         # Main horizontal layout for the two group boxes
         main_edit_layout = QHBoxLayout()
@@ -229,10 +448,18 @@ class JobDetailsDialog(QDialog):
         # Job Details Group
         job_details_group = QGroupBox("Job Information")
         form_layout = QFormLayout(job_details_group)
+        form_layout.setSpacing(8)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        
         job_field_keys = ["Customer", "Part#", "Job Ticket#", "PO#", "Inlay Type", "Label Size", "Quantity", "Due Date"]
         for key in job_field_keys:
+            label = QLabel(f"{key}:")
+            label.setStyleSheet("color: #ffffff; font-weight: normal; min-width: 80px;")
+            label.setMinimumWidth(80)
             field = QLineEdit(self.job_data.get(key, ''))
-            form_layout.addRow(f"{key}:", field)
+            field.setMinimumWidth(120)
+            form_layout.addRow(label, field)
             self.job_fields_edit[key] = field
         left_layout.addWidget(job_details_group)
         left_layout.addStretch()
@@ -245,10 +472,18 @@ class JobDetailsDialog(QDialog):
         # Encoding Details Group
         encoding_details_group = QGroupBox("Encoding Information")
         encoding_form_layout = QFormLayout(encoding_details_group)
+        encoding_form_layout.setSpacing(8)
+        encoding_form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        encoding_form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        
         encoding_field_keys = ["Item", "UPC Number", "Serial Number", "LPR", "Rolls"]
         for key in encoding_field_keys:
+            label = QLabel(f"{key}:")
+            label.setStyleSheet("color: #ffffff; font-weight: normal; min-width: 80px;")
+            label.setMinimumWidth(80)
             field = QLineEdit(self.job_data.get(key, ''))
-            encoding_form_layout.addRow(f"{key}:", field)
+            field.setMinimumWidth(120)
+            encoding_form_layout.addRow(label, field)
             self.encoding_fields_edit[key] = field
         right_layout.addWidget(encoding_details_group)
         right_layout.addStretch()
@@ -261,15 +496,22 @@ class JobDetailsDialog(QDialog):
         button_layout = QHBoxLayout()
         save_btn = QPushButton("Save Changes")
         save_btn.setObjectName("saveButton")
+        save_btn.setProperty("class", "success")  # Use qt_material success styling
+        save_btn.setMaximumHeight(30)
         save_btn.clicked.connect(self.save_changes)
         
         cancel_btn = QPushButton("Cancel")
+        cancel_btn.setMaximumHeight(30)
         cancel_btn.clicked.connect(self.cancel_edit)
         
         button_layout.addStretch()
         button_layout.addWidget(cancel_btn)
         button_layout.addWidget(save_btn)
         layout.addLayout(button_layout)
+        
+        # Set the widget in the scroll area
+        edit_scroll.setWidget(edit_widget)
+        self.edit_tab = edit_scroll
         
     def save_changes(self):
         updated_data = {}
@@ -295,15 +537,17 @@ class JobDetailsDialog(QDialog):
         QMessageBox.information(self, "Success", "Job details have been updated.")
 
     def cancel_edit(self):
-        # Remove the edit tab when cancelling
-        if hasattr(self, 'edit_tab'):
-            edit_tab_index = self.tab_widget.indexOf(self.edit_tab)
-            if edit_tab_index != -1:
-                self.tab_widget.removeTab(edit_tab_index)
-                self.edit_tab.deleteLater()
-                del self.edit_tab
+        # Remove the edit tab widget and restore the original layout
+        if hasattr(self, 'edit_tab_widget'):
+            self.edit_tab_widget.setParent(None)
+            self.edit_tab_widget.deleteLater()
+            del self.edit_tab_widget
+            del self.edit_tab
                 
-        self.tab_widget.setCurrentIndex(0)
+            # Restore the original splitter layout
+            self.setup_ui()
+            self.load_job_data()
+            self.check_directories()
     
     def complete_job(self):
         reply = QMessageBox.question(self, "Complete Job", "Are you sure you want to mark this job as completed?",
@@ -350,13 +594,13 @@ class JobDetailsDialog(QDialog):
         job_path = self.find_job_directory()
         if job_path:
             self.dir_status_label.setText(f"✅ Job directory found at: {job_path}")
-            self.dir_status_label.setStyleSheet("color: green; font-weight: bold;")
+            self.dir_status_label.setStyleSheet("color: #4caf50; font-weight: bold;")  # Green for success
             self.open_dir_btn.setEnabled(True)
             self.create_dir_btn.setEnabled(False)
-            self.refresh_files()
+            self.refresh_file_tree()
         else:
             self.dir_status_label.setText("❌ Job directory not found.")
-            self.dir_status_label.setStyleSheet("color: red; font-weight: bold;")
+            self.dir_status_label.setStyleSheet("color: #f44336; font-weight: bold;")  # Red for error
             self.open_dir_btn.setEnabled(False)
             self.create_dir_btn.setEnabled(True)
 
@@ -402,215 +646,144 @@ class JobDetailsDialog(QDialog):
                 continue
         return found_paths
 
-    def refresh_files(self):
-        self.files_list.clear()
-        job_path = self.find_job_directory()
-        if job_path:
-            try:
-                # Add files from main job directory
-                for filename in os.listdir(job_path):
-                    file_path = os.path.join(job_path, filename)
-                    if os.path.isfile(file_path):
-                        self.files_list.addItem(f"📄 {filename}")
-                
-                # Check for EPC structure and add database files from data folder
-                data_folder = os.path.join(job_path, "data")
-                if os.path.exists(data_folder) and os.path.isdir(data_folder):
-                    self.files_list.addItem("📁 EPC Database Files:")
-                    for filename in os.listdir(data_folder):
-                        file_path = os.path.join(data_folder, filename)
-                        if os.path.isfile(file_path):
-                            self.files_list.addItem(f"  📊 {filename}")
-                
-                # Check for UPC structure and add files from UPC/data folder
-                upc_number = self.job_data.get("UPC Number", "")
-                if upc_number:
-                    upc_folder = os.path.join(job_path, upc_number)
-                    if os.path.exists(upc_folder) and os.path.isdir(upc_folder):
-                        # Add EPC database files from UPC/data folder
-                        upc_data_folder = os.path.join(upc_folder, "data")
-                        if os.path.exists(upc_data_folder) and os.path.isdir(upc_data_folder):
-                            self.files_list.addItem(f"📁 {upc_number}/data (EPC Database Files):")
-                            for filename in os.listdir(upc_data_folder):
-                                file_path = os.path.join(upc_data_folder, filename)
-                                if os.path.isfile(file_path):
-                                    self.files_list.addItem(f"  📊 {filename}")
-                        
-                        # Add template files from UPC/print folder
-                        upc_print_folder = os.path.join(upc_folder, "print")
-                        if os.path.exists(upc_print_folder) and os.path.isdir(upc_print_folder):
-                            self.files_list.addItem(f"📁 {upc_number}/print (Templates):")
-                            for filename in os.listdir(upc_print_folder):
-                                file_path = os.path.join(upc_print_folder, filename)
-                                if os.path.isfile(file_path):
-                                    self.files_list.addItem(f"  🖨️ {filename}")
-                
-                # If no files found, show a message
-                if self.files_list.count() == 0:
-                    self.files_list.addItem("No files found in job directory")
-                    
-            except (OSError, PermissionError) as e:
-                self.files_list.addItem(f"Error reading directory: {e}")
-
-    def open_selected_file(self):
-        item = self.files_list.currentItem()
-        if not item: 
-            return
-        
-        item_text = item.text()
-        
-        # Skip folder headers and indented section headers
-        if item_text.startswith("📁") or ":" in item_text:
-            return
-        
+    def open_checklist(self):
+        """Open the job checklist PDF using the default system viewer."""
         job_path = self.find_job_directory()
         if not job_path:
+            QMessageBox.warning(self, "Checklist Not Found", "Job directory not found.")
             return
         
-        # Determine the actual file path based on the item text format
-        if item_text.startswith("📄"):
-            # Main directory file
-            filename = item_text.replace("📄 ", "")
-            file_path = os.path.join(job_path, filename)
-        elif item_text.startswith("  📊"):
-            # EPC database file - could be in data folder or UPC/data folder
-            filename = item_text.replace("  📊 ", "")
+        try:
+            # Generate the expected filename to find it more reliably
+            customer = self.job_data.get('Customer', '')
+            ticket = self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', ''))
+            po = self.job_data.get('PO#', '')
             
-            # Check if it's in main data folder first
-            main_data_path = os.path.join(job_path, "data", filename)
-            if os.path.exists(main_data_path):
-                file_path = main_data_path
+            # This is the standard name format from the checklist creation logic
+            expected_filename = f"{customer}-{ticket}-{po}-Checklist.pdf".lower()
+            
+            # Search for a file that matches the pattern, case-insensitively
+            found_checklist = None
+            for filename in os.listdir(job_path):
+                if filename.lower() == expected_filename:
+                    found_checklist = os.path.join(job_path, filename)
+                    break # Exact match found
+            
+            # If no exact match, fall back to the original looser search
+            if not found_checklist:
+                for filename in os.listdir(job_path):
+                    if "checklist" in filename.lower() and filename.lower().endswith(".pdf"):
+                        found_checklist = os.path.join(job_path, filename)
+                        break
+
+            if found_checklist:
+                self.open_path_in_explorer(found_checklist)
             else:
-                # Check in UPC/data folder
-                upc_number = self.job_data.get("UPC Number", "")
-                if upc_number:
-                    upc_data_path = os.path.join(job_path, upc_number, "data", filename)
-                    if os.path.exists(upc_data_path):
-                        file_path = upc_data_path
-                    else:
-                        QMessageBox.warning(self, "File Not Found", f"Could not locate file: {filename}")
-                        return
-                else:
-                    QMessageBox.warning(self, "File Not Found", f"Could not locate file: {filename}")
-                    return
-        elif item_text.startswith("  🖨️"):
-            # Template file in UPC/print folder
-            filename = item_text.replace("  🖨️ ", "")
-            upc_number = self.job_data.get("UPC Number", "")
-            if upc_number:
-                file_path = os.path.join(job_path, upc_number, "print", filename)
-            else:
-                QMessageBox.warning(self, "File Not Found", f"Could not locate template file: {filename}")
-                return
-        else:
-            # Fallback to original behavior
-            file_path = os.path.join(job_path, item_text)
-        
-        # Open the file
-        if os.path.exists(file_path):
-                self.open_path_in_explorer(file_path)
-        else:
-            QMessageBox.warning(self, "File Not Found", f"File does not exist: {file_path}")
+                QMessageBox.warning(self, "Checklist Not Found", 
+                                  "No checklist PDF found in the job directory.\n\n"
+                                  "You can try to regenerate it from the 'Job Actions' section.")
+
+        except (OSError, PermissionError) as e:
+            QMessageBox.critical(self, "Error", f"Could not access job directory: {e}")
 
     def open_path_in_explorer(self, path):
+        """Open a file or folder in the system's default file explorer."""
         try:
-            # Use os.path.normpath to ensure the path format is correct for the OS
-            normalized_path = os.path.normpath(path)
-            
-            if not os.path.exists(normalized_path):
-                QMessageBox.warning(self, "File Not Found", f"The specified file does not exist:\n{normalized_path}")
-                return
-
             if platform.system() == "Windows":
-                # os.startfile is the most reliable way on Windows
-                os.startfile(normalized_path)
-            elif platform.system() == "Darwin": # macOS
-                subprocess.run(["open", normalized_path])
-            else: # Linux and other Unix-like systems
-                subprocess.run(["xdg-open", normalized_path])
+                if os.path.isfile(path):
+                    subprocess.run(["explorer", "/select,", path])
+                else:
+                    subprocess.run(["explorer", path])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", path])
+            else:  # Linux
+                subprocess.run(["xdg-open", path])
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not open path '{path}':\n{e}")
+            QMessageBox.warning(self, "Error", f"Could not open path in explorer: {e}")
     
     def archive_job(self):
         reply = QMessageBox.question(self, "Archive Job",
-                                   "This will move the job's folder to the archive and remove it from the active list.\n\nAre you sure you want to proceed?",
+                                   "Are you sure you want to archive this job? This will move it to the archive.",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-
         if reply == QMessageBox.StandardButton.Yes:
-            # The dialog's responsibility is to signal the request, not perform the move.
-            # The main window orchestrates the move by telling the archive page.
-            
-            # Find the job folder path to ensure it's in the job_data payload.
-            job_folder_path = self.find_job_directory()
-
-            if not job_folder_path:
-                 QMessageBox.information(self, "No Folder Found",
-                                        "No job folder was found. The job data will be archived without moving any files.")
-            else:
-                # Make sure the path is in the data we are about to emit
-                self.job_data['job_folder_path'] = job_folder_path
-
-            # Proceed with archiving the job data.
-            self.job_data['dateArchived'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             self.job_archived.emit(self.job_data)
             self.accept()
 
     def delete_job(self):
-        reply = QMessageBox.question(self, "Delete Job", "This action cannot be undone. Are you sure?",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                   QMessageBox.StandardButton.No)
+        reply = QMessageBox.question(self, "Delete Job", 
+                                   "Are you sure you want to permanently delete this job and all its files?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self.job_deleted.emit()
             self.accept()
 
     def create_job_directory(self):
         # Determine the base path from the job data
-        if self.job_data.get('Shared Drive'):
+        if self.job_data.get("Shared Drive"):
             base_path = self.network_path
-        elif self.job_data.get('Desktop'):
+        elif self.job_data.get("Desktop"):
             base_path = os.path.expanduser("~/Desktop")
-        elif self.job_data.get('Custom Path'):
-            base_path = self.job_data['Custom Path']
+        elif self.job_data.get("Custom Path"):
+            base_path = self.job_data["Custom Path"]
         else:
-            # Default or error
-            QMessageBox.warning(self, "No Path", "No valid save location (Desktop, Shared Drive, or Custom) is set for this job.")
+            QMessageBox.warning(self, "Error", "No save location selected.")
             return
             
         try:
             customer = self.job_data.get("Customer")
             label_size = self.job_data.get("Label Size")
-            current_date = datetime.now().strftime("%y-%m-%d")
             po_num = self.job_data.get("PO#")
-            job_ticket = self.job_data.get("Job Ticket#")
+            job_ticket = self.job_data.get("Job Ticket#", self.job_data.get("Ticket#", ""))
+
+            if not all([customer, label_size, po_num, job_ticket]):
+                QMessageBox.warning(self, "Missing Information", 
+                                  "Customer, Label Size, PO#, and Ticket# are required to create a folder.")
+                return
+
+            current_date = datetime.now().strftime("%y-%m-%d")
             job_folder_name = f"{current_date} - {po_num} - {job_ticket}"
             
             customer_path = os.path.join(base_path, customer)
             label_size_path = os.path.join(customer_path, label_size)
             job_path = os.path.join(label_size_path, job_folder_name)
             
-            # Check if the parent directories exist before creating the final job folder
-            if not os.path.exists(customer_path):
-                os.makedirs(customer_path)
-            if not os.path.exists(label_size_path):
-                os.makedirs(label_size_path)
+            # Create directories if they don't exist
+            os.makedirs(customer_path, exist_ok=True)
+            os.makedirs(label_size_path, exist_ok=True)
 
-            os.makedirs(job_path, exist_ok=True)
+            if os.path.exists(job_path):
+                QMessageBox.warning(self, "Warning", f"Job folder already exists:\n{job_path}")
+                return
+
+            os.makedirs(job_path)
             
             # Create print folder and copy template
             print_folder_path = os.path.join(job_path, "print")
             os.makedirs(print_folder_path, exist_ok=True)
             self.copy_template_to_job(customer, label_size, print_folder_path)
             
-            QMessageBox.information(self, "Success", f"Job folder created:\n{job_path}")
+            # Save job data to JSON file
+            self.job_data["job_folder_path"] = job_path
+            job_data_path = os.path.join(job_path, "job_data.json")
+            try:
+                with open(job_data_path, "w") as f:
+                    json.dump(self.job_data, f, indent=4)
+            except IOError as e:
+                QMessageBox.warning(self, "Save Error", f"Could not save job_data.json.\n{e}")
+
+            # Create checklist PDF
+            self.create_checklist_pdf(job_data_path, job_path)
+
+            QMessageBox.information(self, "Success", f"Job folder created successfully at:\n{job_path}")
             self.check_directories()
+
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not create job folder: {e}")
+            print(f"Error creating job folder: {e}")
+            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
 
     def copy_template_to_job(self, customer, label_size, print_folder_path):
         """Copy .btw template file to the job's print folder."""
         try:
-            import src.config as config
-            import shutil
             from src.utils.epc_conversion import get_template_path_with_inlay
             
             template_base_path = config.get_template_base_path()
@@ -627,9 +800,9 @@ class JobDetailsDialog(QDialog):
             
             if template_path and os.path.exists(template_path):
                 # Determine destination filename priority: UPC > Job Ticket > PO Number
-                upc = self.job_data.get("UPC Number", "")
-                job_ticket = self.job_data.get("Job Ticket#", "")
+                job_ticket = self.job_data.get("Job Ticket#", self.job_data.get("Ticket#", ""))
                 po_num = self.job_data.get("PO#", "")
+                upc = self.job_data.get("UPC Number", "")
                 
                 if upc:
                     destination_filename = f"{upc}.btw"
@@ -648,111 +821,61 @@ class JobDetailsDialog(QDialog):
             print(f"Error copying template: {e}")
 
     def regenerate_checklist(self):
+        """Regenerate the checklist PDF for the job."""
         job_path = self.find_job_directory()
         if not job_path:
-            QMessageBox.warning(self, "No Directory", "Cannot regenerate checklist without a job directory.")
+            QMessageBox.warning(self, "Error", "Job directory not found. Cannot regenerate checklist.")
             return
         
         template_path = os.path.join(self.base_path, "data", "Encoding Checklist V4.1.pdf")
         if not os.path.exists(template_path):
-            QMessageBox.warning(self, "Missing Template", "Checklist template not found.")
+            QMessageBox.warning(self, "Missing Template", 
+                              "Could not find the PDF work order template. Cannot regenerate checklist.")
             return
 
-        try:
-            # Re-use your existing checklist generation logic
-            fields_to_fill = { "Customer": "customer", "Part#": "part_num", "Job Ticket#": "job_ticket", "PO#": "customer_po", "Inlay Type": "inlay_type", "Label Size": "label_size", "Quantity": "qty", "Item": "item", "UPC Number": "upc", "LPR": "lpr", "Rolls": "rolls", "Start":"start", "End":"end", "Date": "Date" }
-            output_file_name = f"{self.job_data.get('Customer')}-{self.job_data.get('Job Ticket#')}-{self.job_data.get('PO#')}-Checklist.pdf"
-            save_path = os.path.join(job_path, output_file_name)
+        customer = self.job_data.get('Customer', '')
+        ticket = self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', ''))
+        po = self.job_data.get('PO#', '')
+        output_filename = f"{customer}-{ticket}-{po}-Checklist.pdf"
+        output_path = os.path.join(job_path, output_filename)
 
-            doc = fitz.open(template_path)
-            for page in doc:
-                for widget in page.widgets():
-                    for data_key, pdf_key in fields_to_fill.items():
-                        if widget.field_name == pdf_key:
-                            value = datetime.now().strftime('%m/%d/%Y') if data_key == "Date" else self.job_data.get(data_key, "")
-                            widget.field_value = str(value)
-                            widget.update()
-                            break
-            doc.save(save_path, garbage=4, deflate=True)
-            doc.close()
-            QMessageBox.information(self, "Success", f"Checklist regenerated successfully.")
-            self.refresh_files()
-        except Exception as e:
-            QMessageBox.critical(self, "PDF Error", f"Could not generate checklist:\n{e}")
+        # Use threaded PDF generation
+        self.pdf_progress_dialog = PDFProgressDialog(template_path, self.job_data, output_path, self)
+        self.pdf_progress_dialog.generation_finished.connect(
+            lambda success, result: self.on_pdf_generation_finished(success, result, output_path)
+        )
+        self.pdf_progress_dialog.exec()
 
-    def get_stylesheet(self):
-        return """
-            QDialog {
-                /* Let qt_material handle the base background */
-            }
-            QTabWidget#mainTabWidget::pane { 
-                border: 1px solid #565656; 
-                border-top: none;
-            }
-            QTabBar::tab { 
-                background: #343a40; 
-                border: 1px solid #565656; 
-                border-bottom: none; 
-                padding: 8px 20px; 
-            }
-            QTabBar::tab:selected { 
-                background: #495057; 
-            }
-            QTabBar::tab:hover {
-                background: #5a6268;
-            }
+    def on_pdf_generation_finished(self, success, result, expected_path):
+        """Handle completion of PDF generation."""
+        if success:
+            print(f"Checklist regenerated successfully at:\n{result}")
+            QMessageBox.information(self, "Success", "Checklist PDF has been regenerated successfully.")
+        else:
+            if "cancelled" not in result.lower():
+                QMessageBox.critical(self, "PDF Error", f"Could not regenerate checklist PDF:\n{result}")
+            print(f"PDF generation failed: {result}")
 
-            QGroupBox { 
-                font-weight: bold; 
-                margin-top: 10px; 
-                border: 1px solid #565656;
-                border-radius: 4px;
-                padding: 10px;
-            }
-            
-            QLabel#readOnlyField { 
-                background-color: #495057; 
-                border: 1px solid #6c757d; 
-                border-radius: 4px; 
-                padding: 5px; 
-                min-height: 20px;
-            }
-            
-            QWidget#headerWidget {
-                background-color: #343a40;
-                border-bottom: 2px solid #565656;
-                padding: 10px;
-            }
-            QLabel#headerTitle { 
-                font-size: 16px; 
-                font-weight: bold; 
-                color: #80c0ff; /* A nice blue for dark themes */
-            }
-            QLabel#headerStatus { 
-                font-size: 12px; 
-                /* Let qt_material set the default text color */
-            }
-            
-            /* General button style is inherited from qt_material */
-            QPushButton {
-                padding: 8px 12px; 
-                font-weight: bold;
-                border-radius: 4px;
-            }
+    def create_checklist_pdf(self, job_data_path, job_path):
+        """Create checklist PDF for the job."""
+        template_path = os.path.join(self.base_path, "data", "Encoding Checklist V4.1.pdf")
+        if not os.path.exists(template_path):
+            QMessageBox.warning(self, "Missing Template", 
+                              "Could not find the PDF work order template. Skipping PDF generation.")
+            return
 
-            /* Specific button overrides for semantic meaning */
-            QPushButton#deleteButton { 
-                background-color: #dc3545; 
-                color: white;
-            }
-            QPushButton#deleteButton:hover { background-color: #c82333; }
-            
-            QPushButton#saveButton { 
-                background-color: #28a745; 
-                color: white;
-            }
-            QPushButton#saveButton:hover { background-color: #218838; }
-        """
+        customer = self.job_data.get('Customer', '')
+        ticket = self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', ''))
+        po = self.job_data.get('PO#', '')
+        output_filename = f"{customer}-{ticket}-{po}-Checklist.pdf"
+        output_path = os.path.join(job_path, output_filename)
+
+        # Use threaded PDF generation
+        self.pdf_progress_dialog = PDFProgressDialog(template_path, self.job_data, output_path, self)
+        self.pdf_progress_dialog.generation_finished.connect(
+            lambda success, result: self.on_pdf_generation_finished(success, result, output_path)
+        )
+        self.pdf_progress_dialog.exec()
 
 class EPCGenerationWorker(QThread):
     """Worker thread for EPC database generation to prevent UI freezing."""
