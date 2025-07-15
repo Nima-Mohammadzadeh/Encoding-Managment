@@ -46,7 +46,17 @@ class JobDetailsDialog(QDialog):
         self.check_directories()
 
     def setup_ui(self):
-        main_layout = QVBoxLayout(self)
+        # Get or create the main layout
+        main_layout = self.layout()
+        if not main_layout:
+            main_layout = QVBoxLayout(self)
+        else:
+            # Clear existing content if we're rebuilding
+            while main_layout.count():
+                child = main_layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+        
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
