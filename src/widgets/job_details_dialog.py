@@ -86,36 +86,55 @@ class JobDetailsDialog(QDialog):
         header_widget.setMinimumHeight(100)
         header_widget.setMaximumHeight(100)
         
-        layout = QGridLayout(header_widget)
+        layout = QHBoxLayout(header_widget)
         layout.setContentsMargins(15, 10, 15, 10)
         layout.setSpacing(8)
         
+        # LEFT SIDE: Job information (condensed)
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
+        
         # Row 1: Job Title and Status
         title_text = f"{self.job_data.get('Customer', 'Unknown Customer')} - {self.job_data.get('Part#', 'N/A')}"
+        title_layout = QHBoxLayout()
+        title_layout.setSpacing(10)
+        
         title_label = QLabel(title_text)
         title_label.setObjectName("headerTitle")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
-        title_label.setWordWrap(True)
-        layout.addWidget(title_label, 0, 0, 1, 3)
         
         status_label = QLabel(f"Status: {self.job_data.get('Status', 'New')}")
         status_label.setObjectName("headerStatus")
         status_label.setStyleSheet("font-size: 12px; color: #ffffff; font-weight: bold;")
-        layout.addWidget(status_label, 0, 3, 1, 2)
         
-        # Row 2: Key Job Details
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(status_label)
+        title_layout.addStretch()
+        info_layout.addLayout(title_layout)
+        
+        # Row 2: Details layout (using horizontal flow)
+        details_layout = QHBoxLayout()
+        details_layout.setSpacing(15)
+        
+        # First column: Job identifiers
+        details_col1 = QVBoxLayout()
+        details_col1.setSpacing(2)
+        
         ticket_label = QLabel(f"Ticket#: {self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', 'N/A'))}")
         ticket_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
         po_label = QLabel(f"PO#: {self.job_data.get('PO#', 'N/A')}")
         po_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
+        
+        details_col1.addWidget(ticket_label)
+        details_col1.addWidget(po_label)
+        
+        # Second column: Production details
+        details_col2 = QVBoxLayout()
+        details_col2.setSpacing(2)
+        
         qty_label = QLabel(f"Quantity: {self.job_data.get('Quantity', self.job_data.get('Qty', 'N/A'))}")
         qty_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
         
-        layout.addWidget(ticket_label, 1, 0)
-        layout.addWidget(po_label, 1, 1)
-        layout.addWidget(qty_label, 1, 2)
-        
-        # Row 3: Additional Details
         due_date = self.job_data.get('Due Date', 'N/A')
         if due_date and due_date != 'N/A':
             try:
@@ -128,50 +147,65 @@ class JobDetailsDialog(QDialog):
         else:
             due_label = QLabel("Due: N/A")
         due_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
-            
+        
+        details_col2.addWidget(qty_label)
+        details_col2.addWidget(due_label)
+        
+        # Third column: Product details
+        details_col3 = QVBoxLayout()
+        details_col3.setSpacing(2)
+        
         upc_label = QLabel(f"UPC: {self.job_data.get('UPC Number', 'N/A')}")
         upc_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
         label_size_label = QLabel(f"Label Size: {self.job_data.get('Label Size', 'N/A')}")
         label_size_label.setStyleSheet("color: #ffffff; font-weight: normal; font-size: 11px;")
         
-        layout.addWidget(due_label, 2, 0)
-        layout.addWidget(upc_label, 2, 1)
-        layout.addWidget(label_size_label, 2, 2)
+        details_col3.addWidget(upc_label)
+        details_col3.addWidget(label_size_label)
         
-        # Action Buttons (Right side)
+        # Add all columns to the details layout
+        details_layout.addLayout(details_col1)
+        details_layout.addLayout(details_col2)
+        details_layout.addLayout(details_col3)
+        details_layout.addStretch(1)
+        
+        info_layout.addLayout(details_layout)
+        
+        # RIGHT SIDE: Action buttons (vertically stacked)
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
         
         self.edit_btn = QPushButton("Edit Job")
         self.edit_btn.setMaximumHeight(30)
+        self.edit_btn.setMaximumWidth(120)
         self.edit_btn.clicked.connect(self.enter_edit_mode)
-        button_layout.addWidget(self.edit_btn)
         
         complete_btn = QPushButton("Complete Job")
         complete_btn.setMaximumHeight(30)
+        complete_btn.setMaximumWidth(120)
         complete_btn.clicked.connect(self.complete_job)
-        button_layout.addWidget(complete_btn)
 
         archive_btn = QPushButton("Archive Job")
         archive_btn.setMaximumHeight(30)
+        archive_btn.setMaximumWidth(120)
         archive_btn.clicked.connect(self.archive_job)
-        button_layout.addWidget(archive_btn)
 
         delete_btn = QPushButton("Delete Job")
         delete_btn.setObjectName("deleteButton")
         delete_btn.setProperty("class", "danger")  # Use qt_material danger styling
         delete_btn.setMaximumHeight(30)
+        delete_btn.setMaximumWidth(120)
         delete_btn.clicked.connect(self.delete_job)
-        button_layout.addWidget(delete_btn)
-
-        layout.addLayout(button_layout, 0, 4, 3, 1)
         
-        # Set column stretch to make details expand
-        layout.setColumnStretch(0, 1)
-        layout.setColumnStretch(1, 1)
-        layout.setColumnStretch(2, 1)
-        layout.setColumnStretch(3, 0)
-        layout.setColumnStretch(4, 0)
+        button_layout.addWidget(self.edit_btn)
+        button_layout.addWidget(complete_btn)
+        button_layout.addWidget(archive_btn)
+        button_layout.addWidget(delete_btn)
+        
+        # Add both sides to the main layout with proper spacing
+        layout.addLayout(info_layout, 3)  # Give info section more space
+        layout.addStretch(1)              # Add flexible space between
+        layout.addLayout(button_layout, 0)  # Buttons take minimum needed space
         
         return header_widget
         
