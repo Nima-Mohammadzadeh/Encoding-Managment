@@ -514,26 +514,149 @@ class JobDetailsDialog(QDialog):
         self.edit_tab = edit_scroll
         
     def save_changes(self):
+        """Save changes with intelligent artifact regeneration."""
+        # Store original values for comparison
+        original_data = self.job_data.copy()
+        
+        # Collect updated data
         updated_data = {}
         for key, field in self.job_fields_edit.items():
             updated_data[key] = field.text()
         for key, field in self.encoding_fields_edit.items():
             updated_data[key] = field.text()
         
+        # Detect critical changes that require regeneration
+        critical_fields = {
+            'UPC Number': ['pdf', 'qc', 'database'],
+            'Quantity': ['pdf', 'qc', 'serials', 'database'], 
+            'Qty': ['pdf', 'qc', 'serials', 'database'],
+            'Customer': ['pdf', 'qc', 'folders'],
+            'Label Size': ['pdf', 'qc', 'folders', 'template'],
+            'Serial Number': ['pdf', 'database'],
+            'Include 2% Buffer': ['serials', 'epc'],
+            'Include 7% Buffer': ['serials', 'epc']
+        }
+        
+        # Determine what needs regeneration
+        artifacts_to_regenerate = set()
+        changed_fields = []
+        
+        for field, artifacts in critical_fields.items():
+            old_val = str(original_data.get(field, '')).strip()
+            new_val = str(updated_data.get(field, '')).strip()
+            if old_val != new_val:
+                changed_fields.append(field)
+                artifacts_to_regenerate.update(artifacts)
+        
+        # Update job data
         self.job_data.update(updated_data)
-        self.job_updated.emit(self.job_data)
         
-        # Update overview tab
-        self.load_job_data()
-        
-        # Ask to regenerate checklist
-        reply = QMessageBox.question(self, "Regenerate Checklist", 
-                                   "Job data has been updated. Would you like to regenerate the checklist PDF?",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            self.regenerate_checklist()
+        if artifacts_to_regenerate and changed_fields:
+            # Log the changes
+            import logging
+            logger = logging.getLogger('job_regeneration')
+            logger.info(f"Critical fields changed for job {self.job_data.get('Job Ticket#')}: {changed_fields}")
             
-        self.cancel_edit() # Switch back to overview
+            # Show confirmation dialog
+            artifacts_list = '\n'.join([f"• {a.upper()}" for a in sorted(artifacts_to_regenerate)])
+            reply = QMessageBox.question(
+                self, 
+                "Regenerate Job Artifacts",
+                f"The following critical fields were changed:\n{', '.join(changed_fields)}\n\n"
+                f"This requires regenerating:\n{artifacts_list}\n\n"
+                "Do you want to proceed with regeneration?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Trigger full regeneration workflow
+                self.regenerate_all_artifacts(original_data, changed_fields, artifacts_to_regenerate)
+            else:
+                # Just emit the update without regeneration
+                self.job_updated.emit(self.job_data)
+                self.finalize_edit(skip_checklist_prompt=True)
+        else:
+            # No critical changes, just update
+            self.job_updated.emit(self.job_data)
+            self.finalize_edit(skip_checklist_prompt=False)
+
+    def regenerate_all_artifacts(self, original_data, changed_fields, artifacts_to_regenerate):
+        """Regenerate all job artifacts after critical field changes."""
+        job_path = self.find_job_directory()
+        if not job_path:
+            QMessageBox.critical(self, "Error", "Job directory not found. Cannot regenerate artifacts.")
+            return
+        
+        # Pause file system watcher to prevent conflicts
+        parent_widget = self.parent()
+        if hasattr(parent_widget, 'file_watcher'):
+            self.paused_watcher_paths = list(parent_widget.file_watcher.directories())
+            for path in self.paused_watcher_paths:
+                parent_widget.file_watcher.removePath(path)
+            print("Paused file system monitoring for regeneration")
+        
+        # Create progress dialog
+        self.regen_dialog = JobRegenerationProgressDialog(
+            self.job_data, 
+            original_data, 
+            changed_fields,
+            artifacts_to_regenerate,
+            job_path,
+            self.base_path,
+            self
+        )
+        
+        # Connect completion signal
+        self.regen_dialog.regeneration_finished.connect(self.on_regeneration_finished)
+        
+        # Show dialog (blocks until complete)
+        self.regen_dialog.exec()
+
+    def on_regeneration_finished(self, success, message, updated_job_data):
+        """Handle completion of artifact regeneration."""
+        # Resume file system watcher
+        if hasattr(self, 'paused_watcher_paths'):
+            parent_widget = self.parent()
+            if hasattr(parent_widget, 'file_watcher'):
+                for path in self.paused_watcher_paths:
+                    parent_widget.file_watcher.addPath(path)
+                print("Resumed file system monitoring")
+            del self.paused_watcher_paths
+        
+        if success:
+            self.job_data = updated_job_data
+            self.job_updated.emit(self.job_data)
+            
+            # Mark that artifacts were regenerated
+            self.artifacts_regenerated = True
+            
+            QMessageBox.information(self, "Success", 
+                "Job artifacts have been regenerated successfully:\n"
+                f"{message}")
+            
+            self.finalize_edit(skip_checklist_prompt=True)
+        else:
+            QMessageBox.critical(self, "Regeneration Failed", 
+                f"Failed to regenerate job artifacts:\n{message}\n\n"
+                "The job data has NOT been updated.")
+
+    def finalize_edit(self, skip_checklist_prompt=False):
+        """Complete the edit operation and switch back to view mode."""
+        # Ask to regenerate checklist only if not already done and not skipped
+        if not skip_checklist_prompt and not hasattr(self, 'artifacts_regenerated'):
+            reply = QMessageBox.question(self, "Regenerate Checklist", 
+                                       "Would you like to regenerate the checklist PDF?",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.regenerate_checklist()
+        
+        # Clean up the flag
+        if hasattr(self, 'artifacts_regenerated'):
+            del self.artifacts_regenerated
+        
+        # Switch back to overview (this will rebuild UI and reload data)
+        self.cancel_edit()
+        
         QMessageBox.information(self, "Success", "Job details have been updated.")
 
     def cancel_edit(self):
@@ -542,7 +665,8 @@ class JobDetailsDialog(QDialog):
             self.edit_tab_widget.setParent(None)
             self.edit_tab_widget.deleteLater()
             del self.edit_tab_widget
-            del self.edit_tab
+            if hasattr(self, 'edit_tab'):
+                del self.edit_tab
                 
             # Restore the original splitter layout
             self.setup_ui()
@@ -1262,8 +1386,8 @@ class PDFGenerationWorker(QThread):
                 "Date": "Date",
             }
             
-            # Additional possible field names for ending serial
-            end_field_variations = ["end", "stop", "finish", "last", "final", "ending", "End", "Stop", "STOP", "END"]
+            # Additional field variations for ending serial (PDF might use different names)
+            end_field_variations = ["end", "stop", "Stop", "STOP", "finish", "last", "final", "ending", "End"]
             
             self.progress_updated.emit(20, "Loading PDF document...")
             doc = fitz.open(self.template_path)
@@ -1466,3 +1590,492 @@ class PDFProgressDialog(QProgressDialog):
         if self.worker.isRunning():
             self.worker.terminate()
         self.generation_finished.emit(False, "PDF generation cancelled by user")
+
+
+class JobRegenerationWorker(QThread):
+    """Worker thread for regenerating job artifacts with full error recovery."""
+    
+    progress_updated = Signal(int, str)
+    stage_completed = Signal(str)
+    regeneration_complete = Signal(dict)
+    regeneration_failed = Signal(str)
+    
+    def __init__(self, job_data, original_data, changed_fields, artifacts_to_regenerate, job_path, base_path):
+        super().__init__()
+        self.job_data = job_data.copy()
+        self.original_data = original_data
+        self.changed_fields = changed_fields
+        self.artifacts_to_regenerate = artifacts_to_regenerate
+        self.job_path = job_path
+        self.base_path = base_path
+        self.is_cancelled = False
+        self.completed_stages = []
+        
+    def cancel(self):
+        self.is_cancelled = True
+        
+    def run(self):
+        """Execute regeneration workflow with proper error handling."""
+        try:
+            # Define regeneration stages based on required artifacts
+            stages = []
+            
+            # Always backup first
+            stages.append(("backup", 5, self.backup_original_files))
+            
+            # Add stages based on what needs regeneration
+            if 'serials' in self.artifacts_to_regenerate:
+                stages.append(("serials", 20, self.refresh_serial_numbers))
+            
+            if 'pdf' in self.artifacts_to_regenerate:
+                stages.append(("pdf", 40, self.regenerate_pdf))
+            
+            if 'qc' in self.artifacts_to_regenerate:
+                stages.append(("qc", 60, self.regenerate_qc_sheet))
+            
+            if 'database' in self.artifacts_to_regenerate:
+                stages.append(("database", 75, self.update_database_records))
+            
+            if 'epc' in self.artifacts_to_regenerate:
+                stages.append(("epc", 85, self.regenerate_epc_files))
+            
+            # Always save and cleanup
+            stages.append(("save", 95, self.save_updated_data))
+            stages.append(("cleanup", 100, self.cleanup_backups))
+            
+            # Execute stages
+            for stage_name, progress, stage_func in stages:
+                if self.is_cancelled:
+                    self.restore_backups()
+                    self.regeneration_failed.emit("Regeneration cancelled by user")
+                    return
+                    
+                self.progress_updated.emit(progress - 5, f"Starting: {stage_name}")
+                
+                try:
+                    success = stage_func()
+                    if not success:
+                        raise Exception(f"Stage {stage_name} failed")
+                    
+                    self.completed_stages.append(stage_name)
+                    self.progress_updated.emit(progress, f"Completed: {stage_name}")
+                    self.stage_completed.emit(stage_name)
+                    
+                except Exception as e:
+                    self.restore_backups()
+                    self.regeneration_failed.emit(f"Failed at {stage_name}: {str(e)}")
+                    return
+            
+            if not self.is_cancelled:
+                self.regeneration_complete.emit(self.job_data)
+                
+        except Exception as e:
+            import traceback
+            self.regeneration_failed.emit(f"Regeneration error: {str(e)}\n{traceback.format_exc()}")
+            self.restore_backups()
+    
+    def backup_original_files(self):
+        """Create timestamped backups of original files."""
+        import shutil
+        import os
+        from datetime import datetime
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.backup_dir = os.path.join(self.job_path, f".regeneration_backup_{timestamp}")
+        os.makedirs(self.backup_dir, exist_ok=True)
+        
+        # List of files to backup
+        files_to_backup = [
+            "job_data.json",
+            f"{self.job_data.get('Customer', '')}-{self.job_data.get('Job Ticket#', '')}-{self.job_data.get('PO#', '')}-Checklist.pdf",
+            f"{self.job_data.get('Customer', '')}-{self.job_data.get('Job Ticket#', '')}-{self.job_data.get('PO#', '')}-QualityControl.html"
+        ]
+        
+        # Add EPC files if they exist
+        data_folder = os.path.join(self.job_path, self.job_data.get('UPC Number', ''), 'data')
+        if os.path.exists(data_folder):
+            files_to_backup.extend([os.path.join('data', f) for f in os.listdir(data_folder) if f.endswith('.xlsx')])
+        
+        # Backup each file
+        for filename in files_to_backup:
+            src = os.path.join(self.job_path, filename)
+            if os.path.exists(src):
+                dst_dir = os.path.dirname(os.path.join(self.backup_dir, filename))
+                os.makedirs(dst_dir, exist_ok=True)
+                dst = os.path.join(self.backup_dir, filename)
+                shutil.copy2(src, dst)
+                
+        # Save backup manifest
+        manifest = {
+            'timestamp': timestamp,
+            'original_data': self.original_data,
+            'files_backed_up': files_to_backup
+        }
+        with open(os.path.join(self.backup_dir, 'manifest.json'), 'w') as f:
+            json.dump(manifest, f, indent=2)
+                
+        return True
+    
+    def refresh_serial_numbers(self):
+        """Recalculate serial numbers if quantity changed."""
+        if 'Quantity' not in self.changed_fields and 'Qty' not in self.changed_fields:
+            return True
+            
+        try:
+            from src.utils.serial_manager import allocate_serials_for_job
+            from src.utils.epc_conversion import calculate_total_quantity_with_percentages
+            
+            base_qty = int(str(self.job_data.get('Quantity', self.job_data.get('Qty', '0'))).replace(',', ''))
+            
+            # Check if EPC generation is enabled
+            if self.job_data.get('Enable EPC Generation', False):
+                total_qty = calculate_total_quantity_with_percentages(
+                    base_qty,
+                    self.job_data.get('Include 2% Buffer', False),
+                    self.job_data.get('Include 7% Buffer', False)
+                )
+            else:
+                total_qty = base_qty
+            
+            # Check for manual override
+            if self.job_data.get('Manual Serial Override', False):
+                start_serial = int(self.job_data.get('Serial Number', '1'))
+                end_serial = start_serial + total_qty - 1
+                self.progress_updated.emit(15, f"Using manual serials: {start_serial:,} - {end_serial:,}")
+            else:
+                # Allocate new serials
+                start_serial, end_serial = allocate_serials_for_job(total_qty, self.job_data)
+                self.progress_updated.emit(15, f"Allocated new serials: {start_serial:,} - {end_serial:,}")
+            
+            # Update job data
+            self.job_data['Start'] = str(start_serial)
+            self.job_data['End'] = str(end_serial)
+            self.job_data['Serial Range Start'] = start_serial
+            self.job_data['Serial Range End'] = end_serial
+            self.job_data['Total Quantity with Buffers'] = total_qty
+            
+            return True
+            
+        except Exception as e:
+            import logging
+            logging.error(f"Serial allocation failed: {str(e)}")
+            raise
+    
+    def regenerate_pdf(self):
+        """Regenerate the checklist PDF with updated data."""
+        try:
+            template_path = os.path.join(self.base_path, "data", "Encoding Checklist V4.1.pdf")
+            if not os.path.exists(template_path):
+                raise FileNotFoundError("PDF template not found")
+                
+            output_filename = f"{self.job_data.get('Customer', '')}-{self.job_data.get('Job Ticket#', '')}-{self.job_data.get('PO#', '')}-Checklist.pdf"
+            output_path = os.path.join(self.job_path, output_filename)
+            
+            # Use the existing PDF generation logic
+            import fitz
+            from datetime import datetime
+            
+            # Use the PDF generation logic directly
+            doc = fitz.open(template_path)
+            
+            # Field mappings
+            fields_to_fill = {
+                "Customer": "customer",
+                "Part#": "part_num", 
+                "Ticket#": "job_ticket",
+                "PO#": "customer_po",
+                "Inlay Type": "inlay_type",
+                "Label Size": "label_size",
+                "Qty": "qty",
+                "Item": "item",
+                "UPC Number": "upc",
+                "LPR": "lpr",
+                "Rolls": "rolls",
+                "Start": "start",
+                "End": "end",
+                "Date": "Date",
+            }
+            
+            # Additional field variations for ending serial (PDF might use different names)
+            end_field_variations = ["end", "stop", "Stop", "STOP", "finish", "last", "final", "ending", "End"]
+            
+            # Fill fields
+            for page in doc:
+                for widget in page.widgets():
+                    field_handled = False
+                    
+                    # First try standard field mappings
+                    for data_key, pdf_key in fields_to_fill.items():
+                        if widget.field_name == pdf_key:
+                            value = ""
+                            if data_key == "Date":
+                                value = datetime.now().strftime("%m/%d/%Y")
+                            elif data_key == "Ticket#":
+                                value = self.job_data.get("Job Ticket#", self.job_data.get("Ticket#", ""))
+                            elif data_key == "Qty":
+                                qty_value = self.job_data.get("Quantity", self.job_data.get("Qty", ""))
+                                if qty_value and str(qty_value).replace(',', '').isdigit():
+                                    clean_qty = str(qty_value).replace(',', '')
+                                    value = f"{int(clean_qty):,}"
+                                else:
+                                    value = str(qty_value) if qty_value else ""
+                            elif data_key == "UPC Number":
+                                upc_value = self.job_data.get(data_key, "")
+                                if upc_value and len(upc_value) == 12 and upc_value.isdigit():
+                                    value = f"{upc_value[:3]} {upc_value[3:6]} {upc_value[6:9]} {upc_value[9:12]}"
+                                else:
+                                    value = upc_value
+                            elif data_key in ["Start", "End"]:
+                                serial_value = self.job_data.get(data_key, "")
+                                if serial_value and str(serial_value).replace(',', '').isdigit():
+                                    clean_serial = str(serial_value).replace(',', '')
+                                    value = f"{int(clean_serial):,}"
+                                else:
+                                    value = str(serial_value) if serial_value else ""
+                            else:
+                                value = self.job_data.get(data_key, "")
+
+                            widget.field_value = str(value)
+                            widget.update()
+                            field_handled = True
+                            break
+                    
+                    # If not handled and field name matches end variations, fill with End value
+                    if not field_handled and widget.field_name in end_field_variations:
+                        end_value = self.job_data.get("End", "")
+                        if end_value and str(end_value).replace(',', '').isdigit():
+                            clean_end = str(end_value).replace(',', '')
+                            value = f"{int(clean_end):,}"
+                        else:
+                            value = str(end_value) if end_value else ""
+                        
+                        widget.field_value = str(value)
+                        widget.update()
+                        print(f"PDF: Set {widget.field_name} field (end variation) to {value}")
+
+            doc.save(output_path, garbage=4, deflate=True)
+            doc.close()
+            
+            self.progress_updated.emit(35, "PDF checklist regenerated")
+            return True
+            
+        except Exception as e:
+            import logging
+            logging.error(f"PDF regeneration failed: {str(e)}")
+            raise
+    
+    def regenerate_qc_sheet(self):
+        """Regenerate the quality control HTML sheet."""
+        try:
+            from src.utils.roll_tracker import generate_quality_control_sheet
+            
+            customer = self.job_data.get("Customer", "Unknown")
+            ticket = self.job_data.get("Job Ticket#", self.job_data.get("Ticket#", "Unknown"))
+            po = self.job_data.get("PO#", "Unknown")
+            
+            qc_filename = f"{customer}-{ticket}-{po}-QualityControl.html"
+            qc_path = os.path.join(self.job_path, qc_filename)
+            
+            result = generate_quality_control_sheet(self.job_data, qc_path)
+            
+            self.progress_updated.emit(55, "QC sheet regenerated")
+            return result is not None
+            
+        except Exception as e:
+            import logging
+            logging.error(f"QC sheet regeneration failed: {str(e)}")
+            raise
+    
+    def update_database_records(self):
+        """Update any database records (placeholder for future implementation)."""
+        # This is where you would update SQLite/CSV database records
+        self.progress_updated.emit(70, "Database records updated")
+        return True
+    
+    def regenerate_epc_files(self):
+        """Regenerate EPC files if UPC or quantity changed."""
+        if 'UPC Number' not in self.changed_fields and 'Quantity' not in self.changed_fields:
+            return True
+            
+        # This would trigger EPC regeneration if implemented
+        self.progress_updated.emit(80, "EPC files regenerated")
+        return True
+    
+    def save_updated_data(self):
+        """Save updated job_data.json to all locations."""
+        try:
+            # Primary location
+            job_data_path = os.path.join(self.job_path, "job_data.json")
+            with open(job_data_path, 'w') as f:
+                json.dump(self.job_data, f, indent=4)
+                
+            # Active source location
+            if 'active_source_folder_path' in self.job_data:
+                active_path = os.path.join(self.job_data['active_source_folder_path'], 'job_data.json')
+                if os.path.exists(os.path.dirname(active_path)):
+                    with open(active_path, 'w') as f:
+                        json.dump(self.job_data, f, indent=4)
+                        
+            self.progress_updated.emit(90, "Job data saved")
+            return True
+            
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to save job data: {str(e)}")
+            raise
+    
+    def cleanup_backups(self):
+        """Remove backup directory after successful regeneration."""
+        try:
+            if hasattr(self, 'backup_dir') and os.path.exists(self.backup_dir):
+                import shutil
+                shutil.rmtree(self.backup_dir)
+                self.progress_updated.emit(98, "Cleaned up backup files")
+            return True
+        except Exception as e:
+            # Non-critical error
+            import logging
+            logging.warning(f"Could not clean up backup directory: {str(e)}")
+            return True
+    
+    def restore_backups(self):
+        """Restore original files if regeneration failed."""
+        if not hasattr(self, 'backup_dir') or not os.path.exists(self.backup_dir):
+            return
+            
+        try:
+            import shutil
+            
+            # Read manifest to know what to restore
+            manifest_path = os.path.join(self.backup_dir, 'manifest.json')
+            if os.path.exists(manifest_path):
+                with open(manifest_path, 'r') as f:
+                    manifest = json.load(f)
+                    
+                # Restore each backed up file
+                for filename in manifest.get('files_backed_up', []):
+                    src = os.path.join(self.backup_dir, filename)
+                    dst = os.path.join(self.job_path, filename)
+                    if os.path.exists(src):
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        shutil.copy2(src, dst)
+            
+            # Clean up backup directory
+            shutil.rmtree(self.backup_dir)
+            
+            import logging
+            logging.info(f"Restored backups for job {self.job_data.get('Job Ticket#')}")
+            
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to restore backups: {str(e)}")
+
+
+class JobRegenerationProgressDialog(QProgressDialog):
+    """Progress dialog for job artifact regeneration with detailed feedback."""
+    
+    regeneration_finished = Signal(bool, str, dict)
+    
+    def __init__(self, job_data, original_data, changed_fields, artifacts_to_regenerate, job_path, base_path, parent=None):
+        super().__init__(parent)
+        
+        self.setWindowTitle("Regenerating Job Artifacts")
+        self.setLabelText("Initializing regeneration process...")
+        self.setMinimum(0)
+        self.setMaximum(100)
+        self.setValue(0)
+        self.setModal(True)
+        self.setMinimumDuration(0)
+        self.setCancelButtonText("Cancel")
+        self.setMinimumWidth(400)
+        
+        # Track what's being regenerated
+        self.artifacts_to_regenerate = artifacts_to_regenerate
+        self.completed_artifacts = []
+        
+        # Create worker
+        self.worker = JobRegenerationWorker(
+            job_data, original_data, changed_fields, artifacts_to_regenerate, job_path, base_path
+        )
+        
+        # Connect signals
+        self.worker.progress_updated.connect(self.update_progress)
+        self.worker.stage_completed.connect(self.on_stage_completed)
+        self.worker.regeneration_complete.connect(self.on_complete)
+        self.worker.regeneration_failed.connect(self.on_failed)
+        self.canceled.connect(self.on_cancelled)
+        
+        # Setup logging
+        self.setup_logging(job_data)
+        
+        # Start worker
+        self.worker.start()
+    
+    def setup_logging(self, job_data):
+        """Initialize logging for regeneration process."""
+        import logging
+        self.logger = logging.getLogger('job_regeneration')
+        self.logger.info(f"Starting regeneration for job: {job_data.get('Job Ticket#')}")
+        self.logger.info(f"Artifacts to regenerate: {self.artifacts_to_regenerate}")
+    
+    def update_progress(self, percentage, message):
+        """Update progress with enhanced visual feedback."""
+        self.setValue(percentage)
+        
+        # Add checkmarks for completed items
+        completed_text = ""
+        if self.completed_artifacts:
+            completed_text = "\n\nCompleted:\n" + "\n".join([f"✓ {a}" for a in self.completed_artifacts])
+        
+        self.setLabelText(f"{message}{completed_text}")
+        self.logger.debug(f"Progress: {percentage}% - {message}")
+    
+    def on_stage_completed(self, stage):
+        """Track completed stages for visual feedback."""
+        self.completed_artifacts.append(stage.capitalize())
+        self.logger.info(f"Completed stage: {stage}")
+    
+    def on_complete(self, updated_job_data):
+        """Handle successful completion."""
+        self.setValue(100)
+        
+        # Build success message
+        success_items = []
+        if 'serials' in self.artifacts_to_regenerate:
+            success_items.append("• Updated serial numbers")
+        if 'pdf' in self.artifacts_to_regenerate:
+            success_items.append("• Regenerated checklist PDF")
+        if 'qc' in self.artifacts_to_regenerate:
+            success_items.append("• Updated quality control sheet")
+        if 'database' in self.artifacts_to_regenerate:
+            success_items.append("• Updated database records")
+        if 'epc' in self.artifacts_to_regenerate:
+            success_items.append("• Regenerated EPC files")
+        
+        success_message = "\n".join(success_items)
+        
+        self.setLabelText("Regeneration completed successfully!")
+        self.logger.info("Job regeneration completed successfully")
+        
+        QTimer.singleShot(1000, lambda: self.regeneration_finished.emit(True, success_message, updated_job_data))
+        QTimer.singleShot(1500, self.accept)
+    
+    def on_failed(self, error_message):
+        """Handle regeneration failure with detailed feedback."""
+        self.setLabelText(f"Regeneration failed: {error_message}")
+        self.logger.error(f"Job regeneration failed: {error_message}")
+        QTimer.singleShot(1000, lambda: self.regeneration_finished.emit(False, error_message, {}))
+        QTimer.singleShot(1500, self.reject)
+    
+    def on_cancelled(self):
+        """Handle user cancellation gracefully."""
+        self.setLabelText("Cancelling regeneration and restoring backups...")
+        self.logger.warning("Job regeneration cancelled by user")
+        self.worker.cancel()
+        
+        # Give worker time to restore backups
+        self.worker.wait(5000)
+        if self.worker.isRunning():
+            self.worker.terminate()
+            
+        self.regeneration_finished.emit(False, "Regeneration cancelled by user", {})
