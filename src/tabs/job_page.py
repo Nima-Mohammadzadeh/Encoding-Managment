@@ -54,7 +54,7 @@ class JobLoaderWorker(QObject):
         self.is_cancelled = False
 
     def run(self):
-        """Scan the source directory for job_data.json files."""
+        """Scan the source directory for job_data.json files, skipping archived jobs."""
         jobs = []
         if not os.path.exists(self.source_dir):
             self.error.emit(f"Source directory not found: {self.source_dir}")
@@ -71,6 +71,11 @@ class JobLoaderWorker(QObject):
                         with open(job_data_path, "r", encoding="utf-8") as f:
                             job_data = json.load(f)
                         
+                        # Critical Fix: Do not load jobs marked as 'Archived'
+                        if job_data.get('Status') == 'Archived':
+                            print(f"Skipping archived job found in active directory: {job_data_path}")
+                            continue
+
                         # Add the canonical path from the filesystem
                         job_data["active_source_folder_path"] = root
                         jobs.append(job_data)

@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QPalette, QIcon
 from src.utils.epc_conversion import generate_epc
 from src.utils.file_utils import resource_path
+from filelock import FileLock, Timeout
 
 class InteractiveRollTrackerDialog(QDialog):
     """Interactive Roll Tracker - A standalone window for tracking roll completion progress."""

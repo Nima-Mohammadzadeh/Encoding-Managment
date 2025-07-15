@@ -6,9 +6,76 @@ from PySide6.QtWidgets import (
     QFrame, QScrollArea, QGridLayout, QProgressBar, QListWidget,
     QListWidgetItem, QGraphicsDropShadowEffect, QSizePolicy
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QPropertyAnimation, QEasingCurve, QRect
+from PySide6.QtCore import Qt, QTimer, Signal, QPropertyAnimation, QEasingCurve, QRect, QObject, QThread
 from PySide6.QtGui import QFont, QColor, QPalette, QIcon, QPainter, QBrush, QPen
 import src.config as config
+
+
+class DashboardDataWorker(QObject):
+    """Worker to load all dashboard data in the background."""
+    data_loaded = Signal(dict, list)  # updated_jobs, all_job_paths
+    error = Signal(str)
+
+    def __init__(self, active_dir, archive_dir, cache):
+        super().__init__()
+        self.active_jobs_source_dir = active_dir
+        self.archive_dir = archive_dir
+        self.cache = cache
+        self.is_cancelled = False
+
+    def run(self):
+        """Load data from the filesystem, using cache to avoid re-reading files."""
+        try:
+            active_jobs, active_paths = self._load_jobs(self.active_jobs_source_dir, is_archived=False)
+            if self.is_cancelled: return
+            
+            archived_jobs, archived_paths = self._load_jobs(self.archive_dir, is_archived=True)
+            if self.is_cancelled: return
+
+            updated_jobs = {**active_jobs, **archived_jobs}
+            all_job_paths = active_paths.union(archived_paths)
+
+            self.data_loaded.emit(updated_jobs, list(all_job_paths))
+        except Exception as e:
+            self.error.emit(f"Failed to load dashboard data: {e}")
+
+    def _load_jobs(self, directory, is_archived):
+        """Generic job loader that uses modification times to update a cache."""
+        updated_jobs = {}
+        found_paths = set()
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+            return updated_jobs, found_paths
+        
+        for root, _, files in os.walk(directory):
+            if self.is_cancelled:
+                break
+            if "job_data.json" in files:
+                job_data_path = os.path.join(root, "job_data.json")
+                found_paths.add(job_data_path)
+                try:
+                    last_modified = os.path.getmtime(job_data_path)
+                    
+                    # Check cache
+                    if job_data_path in self.cache and self.cache[job_data_path]['mtime'] == last_modified:
+                        # File is unchanged, skip reading
+                        continue
+
+                    with open(job_data_path, "r", encoding='utf-8') as f:
+                        job_data = json.load(f)
+                    
+                    if is_archived:
+                        job_data['job_folder_path'] = root
+                    else:
+                        job_data['active_source_folder_path'] = root
+
+                    updated_jobs[job_data_path] = {'mtime': last_modified, 'data': job_data}
+                except Exception as e:
+                    print(f"Error loading job from {job_data_path}: {e}")
+        return updated_jobs, found_paths
+
+    def cancel(self):
+        self.is_cancelled = True
 
 
 class StatCard(QFrame):
@@ -192,6 +259,8 @@ class DashboardPageWidget(QWidget):
         self.base_path = base_path
         self.active_jobs_source_dir = config.ACTIVE_JOBS_SOURCE_DIR
         self.archive_dir = config.ARCHIVE_DIR
+        self.is_loading = False # Prevent concurrent refreshes
+        self.job_data_cache = {} # Cache for job data and modification times
         
         # Setup UI
         self.setup_ui()
@@ -269,8 +338,8 @@ class DashboardPageWidget(QWidget):
         header_layout.addStretch()
         
         # Refresh button
-        refresh_btn = QPushButton("⟳ Refresh")
-        refresh_btn.setStyleSheet("""
+        self.refresh_btn = QPushButton("⟳ Refresh")
+        self.refresh_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
                 color: white;
@@ -284,8 +353,8 @@ class DashboardPageWidget(QWidget):
                 background-color: #106ebe;
             }
         """)
-        refresh_btn.clicked.connect(self.refresh_dashboard)
-        header_layout.addWidget(refresh_btn)
+        self.refresh_btn.clicked.connect(self.refresh_dashboard)
+        header_layout.addWidget(self.refresh_btn)
         
         main_layout.addLayout(header_layout)
 
@@ -433,73 +502,94 @@ class DashboardPageWidget(QWidget):
     
     def refresh_dashboard(self):
         """Refresh all dashboard data."""
+        if self.is_loading:
+            print("Dashboard refresh already in progress. Skipping.")
+            return
+
         print(f"Dashboard refresh triggered at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        self.is_loading = True
+        self.refresh_btn.setText("Refreshing...")
+        self.refresh_btn.setEnabled(False)
+
+        # Setup worker thread
+        self.load_thread = QThread()
+        self.worker = DashboardDataWorker(self.active_jobs_source_dir, self.archive_dir, self.job_data_cache)
+        self.worker.moveToThread(self.load_thread)
+
+        # Connect signals
+        self.load_thread.started.connect(self.worker.run)
+        self.worker.data_loaded.connect(self.on_data_loaded)
+        self.worker.error.connect(self.on_data_load_error)
+
+        # Clean up thread
+        self.worker.data_loaded.connect(self.load_thread.quit)
+        self.worker.error.connect(self.load_thread.quit)
+        self.load_thread.finished.connect(self.load_thread.deleteLater)
+        self.worker.data_loaded.connect(self.worker.deleteLater)
+        self.worker.error.connect(self.worker.deleteLater)
+
+        self.load_thread.start()
+
+    def on_data_loaded(self, updated_jobs, all_job_paths):
+        """Handle the data loaded by the worker thread."""
+        print(f"Dashboard data updated with {len(updated_jobs)} changed jobs. Total paths found: {len(all_job_paths)}.")
         
-        # Load job data
-        active_jobs = self.load_active_jobs()
-        archived_jobs = self.load_archived_jobs()
+        # Update cache with new/modified jobs
+        self.job_data_cache.update(updated_jobs)
         
-        print(f"Found {len(active_jobs)} active jobs and {len(archived_jobs)} archived jobs")
+        # Purge deleted jobs from cache
+        current_paths_in_cache = set(self.job_data_cache.keys())
+        paths_on_disk = set(all_job_paths)
+        deleted_paths = current_paths_in_cache - paths_on_disk
         
-        # Update statistics
+        if deleted_paths:
+            print(f"Purging {len(deleted_paths)} deleted jobs from cache.")
+            for path in deleted_paths:
+                if path in self.job_data_cache:
+                    del self.job_data_cache[path]
+
+        # --- REFINED FILTERING LOGIC ---
+        # Use file paths to definitively separate active from archived jobs.
+        
+        active_jobs = []
+        archived_jobs = []
+        
+        active_dir_path = os.path.normpath(self.active_jobs_source_dir)
+        archive_dir_path = os.path.normpath(self.archive_dir)
+
+        for path, item in self.job_data_cache.items():
+            job_data = item['data']
+            normalized_path = os.path.normpath(path)
+
+            if normalized_path.startswith(archive_dir_path):
+                # If it's in the archive directory, it's archived.
+                archived_jobs.append(job_data)
+            elif normalized_path.startswith(active_dir_path):
+                # If it's in the active directory, it's active.
+                active_jobs.append(job_data)
+        
+        # This will now give the correct counts, matching the Jobs tab.
+        print(f"Recalculating stats with {len(active_jobs)} active and {len(archived_jobs)} archived jobs.")
+        
+        # Update UI with the freshly filtered lists
         self.update_statistics(active_jobs, archived_jobs)
-        
-        # Update calendar (now shows all deadline information)
         self.update_calendar(active_jobs)
-    
-    def load_active_jobs(self):
-        """Load active jobs from directory structure (like job_page does)."""
-        jobs = []
         
-        if not os.path.exists(self.active_jobs_source_dir):
-            os.makedirs(self.active_jobs_source_dir, exist_ok=True)
-            return jobs
-        
-        # Scan for job_data.json files in the directory structure
-        for root, _, files in os.walk(self.active_jobs_source_dir):
-            if "job_data.json" in files:
-                job_data_path = os.path.join(root, "job_data.json")
-                try:
-                    with open(job_data_path, "r", encoding='utf-8') as f:
-                        job_data = json.load(f)
-                    job_data['active_source_folder_path'] = root
-                    jobs.append(job_data)
-                except Exception as e:
-                    print(f"Error loading job from {job_data_path}: {e}")
-        
-        return jobs
-    
-    def load_archived_jobs(self):
-        """Load archived jobs from archive directory structure."""
-        jobs = []
-        
-        if not os.path.exists(self.archive_dir):
-            os.makedirs(self.archive_dir, exist_ok=True)
-            return jobs
-        
-        # Scan archive directory for job folders
-        for folder_name in os.listdir(self.archive_dir):
-            job_folder_path = os.path.join(self.archive_dir, folder_name)
-            if os.path.isdir(job_folder_path):
-                metadata_path = os.path.join(job_folder_path, 'job_data.json')
-                if os.path.exists(metadata_path):
-                    try:
-                        with open(metadata_path, 'r', encoding='utf-8') as f:
-                            job_data = json.load(f)
-                        job_data['job_folder_path'] = job_folder_path
-                        
-                        # Debug: Print date fields for first few jobs
-                        if len(jobs) < 3:
-                            print(f"Archived job {job_data.get('Job Ticket#', 'Unknown')}: "
-                                  f"dateArchived={job_data.get('dateArchived', 'N/A')}, "
-                                  f"archivedDate={job_data.get('archivedDate', 'N/A')}")
-                        
-                        jobs.append(job_data)
-                    except Exception as e:
-                        print(f"Error loading archived job from {metadata_path}: {e}")
-        
-        return jobs
-    
+        self.on_load_finished()
+
+    def on_data_load_error(self, error_message):
+        """Handle errors from the worker thread."""
+        print(f"Error loading dashboard data: {error_message}")
+        # Optionally show a message to the user
+        self.on_load_finished()
+
+    def on_load_finished(self):
+        """Common cleanup after loading finishes or fails."""
+        self.is_loading = False
+        self.refresh_btn.setText("⟳ Refresh")
+        self.refresh_btn.setEnabled(True)
+        print("Dashboard loading process finished.")
+
     def update_statistics(self, active_jobs, archived_jobs):
         """Update statistics cards."""
         # Jobs in Backlog (active jobs)
@@ -509,9 +599,8 @@ class DashboardPageWidget(QWidget):
         total_backlog_quantity = 0
         today = datetime.now().date()
         
-        for job in active_jobs:
-            # Count quantities for backlog
-            qty_str = job.get("Quantity", job.get("Qty", "0"))
+        for job_data in active_jobs:
+            qty_str = job_data.get("Quantity", job_data.get("Qty", "0"))
             if isinstance(qty_str, str):
                 qty_str = qty_str.replace(',', '')
             try:
@@ -533,33 +622,55 @@ class DashboardPageWidget(QWidget):
         completed_week_count = 0
         completed_week_qty = 0
         
-        for job in archived_jobs:
-            # Try both dateArchived (timestamp) and archivedDate (date only) fields
-            archived_date_str = job.get("dateArchived", job.get("archivedDate", ""))
-            if archived_date_str:
-                try:
-                    # Handle both formats: "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DD"
-                    if ' ' in archived_date_str:
-                        # It's a timestamp, extract just the date part
-                        archived_date = datetime.strptime(archived_date_str.split()[0], "%Y-%m-%d").date()
-                    else:
-                        # It's just a date
-                        archived_date = datetime.strptime(archived_date_str, "%Y-%m-%d").date()
-                    
-                    if archived_date >= week_start:
-                        completed_week_count += 1
-                        # Add up the quantities
-                        qty_str = job.get("Quantity", job.get("Qty", "0"))
-                        if isinstance(qty_str, str):
-                            qty_str = qty_str.replace(',', '')
-                        try:
-                            completed_week_qty += int(qty_str)
-                        except:
-                            pass
-                except Exception as e:
-                    print(f"Error parsing date for job {job.get('Job Ticket#', 'Unknown')}: {e}")
-                    pass
+        print(f"\n--- Calculating 'Completed This Week' (Week starts on {week_start.strftime('%Y-%m-%d')}) ---")
+
+        for job_data in archived_jobs:
+            # Check for multiple possible date keys in order of preference
+            archived_date_str = job_data.get("dateArchived",         # Original key with timestamp
+                                     job_data.get("archivedDate",       # Key with date only
+                                     job_data.get("Archived Date")))    # Key matching the table column header
+            
+            job_id = job_data.get('Job Ticket#', 'Unknown')
+
+            if not archived_date_str:
+                print(f"  - Job {job_id}: SKIPPED (No archive date found using keys 'dateArchived', 'archivedDate', or 'Archived Date')")
+                continue
+
+            try:
+                # Handle both timestamp and date-only formats
+                date_part = archived_date_str.split()[0]
+                
+                # Attempt to parse multiple date formats
+                archived_date = None
+                for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+                    try:
+                        archived_date = datetime.strptime(date_part, fmt).date()
+                        break # Success
+                    except ValueError:
+                        continue # Try next format
+                
+                if archived_date is None:
+                    raise ValueError(f"Date '{date_part}' could not be parsed with available formats.")
+
+                if archived_date >= week_start:
+                    print(f"  + Job {job_id}: COUNTED (Date: {archived_date.strftime('%Y-%m-%d')})")
+                    completed_week_count += 1
+                    # Add up the quantities
+                    qty_str = job_data.get("Quantity", job_data.get("Qty", "0"))
+                    if isinstance(qty_str, str):
+                        qty_str = qty_str.replace(',', '')
+                    try:
+                        completed_week_qty += int(qty_str)
+                    except (ValueError, TypeError):
+                        pass # Ignore if quantity is not a valid number
+                else:
+                    print(f"  - Job {job_id}: SKIPPED (Archived on {archived_date.strftime('%Y-%m-%d')}, before current week)")
+
+            except Exception as e:
+                print(f"  - Job {job_id}: SKIPPED (Error parsing date: {e})")
         
+        print(f"--- Calculation complete. Total jobs counted: {completed_week_count} ---\n")
+
         self.completed_week_card.update_value(completed_week_count)
         
         # Format completed quantity this week
@@ -573,9 +684,14 @@ class DashboardPageWidget(QWidget):
     
 
     
-    def update_calendar(self, active_jobs):
+    def update_calendar(self, jobs_data):
         """Update the interactive calendar with job data."""
-        self.calendar_widget.set_jobs_data(active_jobs)
+        # Filter out jobs that are not in the updated_jobs cache
+        # This ensures we only show jobs that were successfully loaded and are relevant
+        self.calendar_widget.set_jobs_data([
+            job_data for job_data in jobs_data
+            if 'active_source_folder_path' in job_data or 'job_folder_path' in job_data
+        ])
     
     def open_database_generator(self):
         """Open the Database Generator tool from dashboard."""
