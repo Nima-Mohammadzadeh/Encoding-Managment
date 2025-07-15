@@ -91,6 +91,7 @@ class JobLoaderWorker(QObject):
 
 class JobPageWidget(QWidget):
     job_to_archive = Signal(dict)
+    job_created = Signal()  # New signal for job creation
 
     def __init__(self, base_path):
         super().__init__()
@@ -1886,6 +1887,9 @@ class JobPageWidget(QWidget):
             success_msg += f"\nTotal quantity (with buffers): {job_data.get('total_qty_with_buffers', 0):,}"
 
         QMessageBox.information(self, "Success", success_msg)
+        
+        # Emit signal to notify dashboard of new job
+        self.job_created.emit()
 
     def closeEvent(self, event):
         """Clean up file system watcher when widget is destroyed."""

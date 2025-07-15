@@ -31,6 +31,7 @@ from PySide6.QtCore import Qt, QDate, QTimer, Signal
 
 class ArchivePageWidget(QWidget):
     job_was_archived = Signal()
+    job_was_deleted = Signal()  # New signal for job deletion
 
     def __init__(self, base_path):
         super().__init__()
@@ -618,6 +619,7 @@ class ArchivePageWidget(QWidget):
             self.apply_filters()
             
             QMessageBox.information(self, "Deleted", "Archived job has been permanently deleted.")
+            self.job_was_deleted.emit() # Emit the new signal
         else:
             QMessageBox.critical(self, "Delete Error", f"Could not delete job folder:\n{message}")
 

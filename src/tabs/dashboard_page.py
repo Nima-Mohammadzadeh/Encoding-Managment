@@ -433,9 +433,13 @@ class DashboardPageWidget(QWidget):
     
     def refresh_dashboard(self):
         """Refresh all dashboard data."""
+        print(f"Dashboard refresh triggered at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
         # Load job data
         active_jobs = self.load_active_jobs()
         archived_jobs = self.load_archived_jobs()
+        
+        print(f"Found {len(active_jobs)} active jobs and {len(archived_jobs)} archived jobs")
         
         # Update statistics
         self.update_statistics(active_jobs, archived_jobs)
@@ -483,6 +487,13 @@ class DashboardPageWidget(QWidget):
                         with open(metadata_path, 'r', encoding='utf-8') as f:
                             job_data = json.load(f)
                         job_data['job_folder_path'] = job_folder_path
+                        
+                        # Debug: Print date fields for first few jobs
+                        if len(jobs) < 3:
+                            print(f"Archived job {job_data.get('Job Ticket#', 'Unknown')}: "
+                                  f"dateArchived={job_data.get('dateArchived', 'N/A')}, "
+                                  f"archivedDate={job_data.get('archivedDate', 'N/A')}")
+                        
                         jobs.append(job_data)
                     except Exception as e:
                         print(f"Error loading archived job from {metadata_path}: {e}")
@@ -491,12 +502,11 @@ class DashboardPageWidget(QWidget):
     
     def update_statistics(self, active_jobs, archived_jobs):
         """Update statistics cards."""
-        # Jobs in Backlog (was Active Jobs)
+        # Jobs in Backlog (active jobs)
         self.jobs_backlog_card.update_value(len(active_jobs))
         
         # Calculate total backlog quantity
         total_backlog_quantity = 0
-        overdue_count = 0
         today = datetime.now().date()
         
         for job in active_jobs:
@@ -508,16 +518,6 @@ class DashboardPageWidget(QWidget):
                 total_backlog_quantity += int(qty_str)
             except:
                 pass
-                
-            # Check for overdue jobs (still track this for activity feed)
-            due_date_str = job.get("Due Date", "")
-            if due_date_str:
-                try:
-                    due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
-                    if due_date < today:
-                        overdue_count += 1
-                except:
-                    pass
         
         # Format total backlog quantity with commas
         if total_backlog_quantity >= 1000000:
@@ -529,15 +529,23 @@ class DashboardPageWidget(QWidget):
         self.total_backlog_qty_card.update_value(qty_display)
         
         # Completed this week (jobs count) and completed quantity this week
-        week_start = today - timedelta(days=today.weekday())
+        week_start = today - timedelta(days=today.weekday())  # Monday of current week
         completed_week_count = 0
         completed_week_qty = 0
         
         for job in archived_jobs:
-            archived_date_str = job.get("dateArchived", "")
+            # Try both dateArchived (timestamp) and archivedDate (date only) fields
+            archived_date_str = job.get("dateArchived", job.get("archivedDate", ""))
             if archived_date_str:
                 try:
-                    archived_date = datetime.strptime(archived_date_str.split()[0], "%Y-%m-%d").date()
+                    # Handle both formats: "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DD"
+                    if ' ' in archived_date_str:
+                        # It's a timestamp, extract just the date part
+                        archived_date = datetime.strptime(archived_date_str.split()[0], "%Y-%m-%d").date()
+                    else:
+                        # It's just a date
+                        archived_date = datetime.strptime(archived_date_str, "%Y-%m-%d").date()
+                    
                     if archived_date >= week_start:
                         completed_week_count += 1
                         # Add up the quantities
@@ -548,7 +556,8 @@ class DashboardPageWidget(QWidget):
                             completed_week_qty += int(qty_str)
                         except:
                             pass
-                except:
+                except Exception as e:
+                    print(f"Error parsing date for job {job.get('Job Ticket#', 'Unknown')}: {e}")
                     pass
         
         self.completed_week_card.update_value(completed_week_count)

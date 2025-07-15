@@ -156,6 +156,7 @@ class JobSelectionDialog(QDialog):
         po = job.get("PO#", "N/A")
         
         main_line = QLabel(f"{customer} - Ticket #{ticket}")
+        main_line.setWordWrap(True)
         main_line.setStyleSheet("font-weight: bold; color: #e0e0e0; font-size: 12px;")
         layout.addWidget(main_line)
         
@@ -164,11 +165,11 @@ class JobSelectionDialog(QDialog):
         qty = job.get("Quantity", job.get("Qty", "N/A"))
         
         # Format quantity with commas
-        if qty and str(qty).replace(',', '').isdigit():
-            clean_qty = str(qty).replace(',', '')
-            qty = f"{int(clean_qty):,}"
-        
+        if isinstance(qty, str) and qty.replace(',', '').isdigit():
+            qty = f"{int(qty.replace(',', '')):,}"
+            
         details_line = QLabel(f"PO: {po} | Part#: {part} | Qty: {qty}")
+        details_line.setWordWrap(True)
         details_line.setStyleSheet("color: #cccccc; font-size: 10px;")
         layout.addWidget(details_line)
         
@@ -177,6 +178,7 @@ class JobSelectionDialog(QDialog):
         size = job.get("Label Size", "N/A")
         
         additional_line = QLabel(f"Inlay: {inlay} | Size: {size}")
+        additional_line.setWordWrap(True)
         additional_line.setStyleSheet("color: #888888; font-size: 10px;")
         layout.addWidget(additional_line)
         

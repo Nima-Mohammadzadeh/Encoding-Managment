@@ -289,9 +289,11 @@ class MainWindow(QMainWindow):
 
         # Connect other signals
         self.jobs_page.job_to_archive.connect(self.archive_page.add_archived_job)
+        self.jobs_page.job_created.connect(self.dashboard_page.refresh_dashboard)  # New connection
         self.settings_page.active_jobs_source_changed.connect(self.jobs_page.update_active_jobs_source_directory)
         self.settings_page.active_jobs_source_changed.connect(self.dashboard_page.update_source_directories)
         self.archive_page.job_was_archived.connect(self.dashboard_page.refresh_dashboard)
+        self.archive_page.job_was_deleted.connect(self.dashboard_page.refresh_dashboard)  # New connection
         
         # Connect dashboard signals
         self.dashboard_page.navigate_to_jobs.connect(lambda: self.switch_page(1))

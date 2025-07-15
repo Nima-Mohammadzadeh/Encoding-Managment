@@ -718,20 +718,25 @@ class JobDetailsDialog(QDialog):
             self.check_directories()
     
     def complete_job(self):
-        reply = QMessageBox.question(self, "Complete Job", "Are you sure you want to mark this job as completed?",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        """Complete and optionally archive a job."""
+        reply = QMessageBox.question(
+            self, 
+            "Complete Job", 
+            "Would you like to complete this job and move it to the archive?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+        )
+        
         if reply == QMessageBox.StandardButton.Yes:
+            # Complete and archive
             self.job_data['Status'] = 'Completed'
             self.job_updated.emit(self.job_data)
             self.load_job_data()
-            QMessageBox.information(self, "Job Completed", "The job status has been set to 'Completed'.")
-
-            # Ask to archive
-            archive_reply = QMessageBox.question(self, "Archive Job", 
-                                               "Would you like to archive this completed job now?",
-                                               QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if archive_reply == QMessageBox.StandardButton.Yes:
-                self.archive_job()
+            self.archive_job()
+        elif reply == QMessageBox.StandardButton.No:
+            # Just complete, don't archive
+            self.job_data['Status'] = 'Completed'
+            self.job_updated.emit(self.job_data)
+            self.load_job_data()
 
     def find_job_directory(self):
         # First, check if the path is already stored in job_data
