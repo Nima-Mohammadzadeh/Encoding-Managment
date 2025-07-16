@@ -107,9 +107,9 @@ class CollapsibleNavigationPanel(QWidget):
             }
         """)
         
-        header_layout = QHBoxLayout(self.header_frame)
-        header_layout.setContentsMargins(5, 5, 5, 5)
-        header_layout.setSpacing(5)
+        self.header_layout = QHBoxLayout(self.header_frame)
+        self.header_layout.setContentsMargins(5, 5, 5, 5)
+        self.header_layout.setSpacing(5)
         
         # Logo
         self.logo_label = QLabel()
@@ -121,22 +121,36 @@ class CollapsibleNavigationPanel(QWidget):
             self.collapse_btn.setIcon(QIcon(collapse_icon_path))
         else:
             self.collapse_btn.setText("≡")
-        self.collapse_btn.setFixedSize(30, 30)
-        self.collapse_btn.setStyleSheet("""
+        self.collapse_btn.setFixedSize(50, 50)
+        self.collapse_btn.setIconSize(QSize(40, 40))
+        
+        self.collapse_btn_original_style = """
             QPushButton {
                 background-color: transparent;
                 border: 1px solid #464647;
-                border-radius: 15px;
+                border-radius: 25px;
             }
             QPushButton:hover {
                 background-color: rgba(255, 255, 255, 0.1);
             }
-        """)
+        """
+        self.collapse_btn_collapsed_style = """
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                padding-left: 18px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        """
+        self.collapse_btn.setStyleSheet(self.collapse_btn_original_style)
         self.collapse_btn.clicked.connect(self.toggle_collapse)
 
-        header_layout.addWidget(self.logo_label)
-        header_layout.addStretch()
-        header_layout.addWidget(self.collapse_btn)
+        self.header_layout.addWidget(self.logo_label)
+        self.header_layout.addStretch(1)
+        self.header_layout.addWidget(self.collapse_btn)
 
         self.main_layout.addWidget(self.header_frame)
         self.update_logo()
@@ -197,8 +211,20 @@ class CollapsibleNavigationPanel(QWidget):
         
         if self.is_collapsed:
             size = 45
+            self.logo_label.hide()
+            # Move button to the start, before the stretch
+            self.header_layout.insertWidget(0, self.collapse_btn)
+            
+            self.collapse_btn.setIconSize(QSize(32, 32))
+            self.collapse_btn.setStyleSheet(self.collapse_btn_collapsed_style)
         else:
             size = 60
+            self.logo_label.show()
+            # Move button to the end, after the stretch
+            self.header_layout.addWidget(self.collapse_btn)
+
+            self.collapse_btn.setIconSize(QSize(40, 40))
+            self.collapse_btn.setStyleSheet(self.collapse_btn_original_style)
 
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
