@@ -99,8 +99,6 @@ class ArchivePageWidget(QWidget):
         search_row.addWidget(self.search_input)
         
         self.clear_search_btn = QPushButton("Clear")
-        self.clear_search_btn.setMinimumWidth(80)  # Increased width to fit text properly
-        self.clear_search_btn.setMaximumWidth(80)  # Set both min and max for consistent sizing
         self.clear_search_btn.clicked.connect(self.clear_search)
         search_row.addWidget(self.clear_search_btn)
         
@@ -125,8 +123,6 @@ class ArchivePageWidget(QWidget):
         # Advanced filters toggle
         self.show_advanced_btn = QPushButton("Date Filters")  # Shortened from "Show Date Filters"
         self.show_advanced_btn.setCheckable(True)
-        self.show_advanced_btn.setMinimumWidth(120)  # Increased width to properly fit text content
-        self.show_advanced_btn.setMaximumWidth(120)  # Set consistent sizing
         self.show_advanced_btn.clicked.connect(self.toggle_advanced_filters)
         quick_filter_layout.addWidget(self.show_advanced_btn)
         
@@ -534,20 +530,9 @@ class ArchivePageWidget(QWidget):
             QMessageBox.warning(self, "Error", "Could not retrieve job data.")
             return
 
-        dialog = JobDetailsDialog(job_data, self.base_path, self)
-        dialog.setWindowTitle(f"Archived Job Details - {job_data.get('Job Ticket#', job_data.get('Ticket#', 'N/A'))}")
+        # Create dialog with is_archived=True to properly configure it for archived jobs
+        dialog = JobDetailsDialog(job_data, self.base_path, self, is_archived=True)
         
-        # Make the dialog read-only for archived jobs
-        dialog.edit_btn.setEnabled(False)
-        dialog.edit_btn.setToolTip("Editing is disabled for archived jobs")
-        
-        # Disable specific action buttons for archived jobs
-        if hasattr(dialog, 'complete_btn'):
-            dialog.complete_btn.setEnabled(False)
-        
-        if hasattr(dialog, 'archive_btn'):
-            dialog.archive_btn.setEnabled(False)
-
         dialog.exec()
 
     def _get_job_data_for_row(self, row):

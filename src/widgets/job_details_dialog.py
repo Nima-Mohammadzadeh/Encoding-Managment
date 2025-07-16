@@ -8,7 +8,8 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QTextEdit, QComboBox, QListWidget,
     QTabWidget, QWidget, QMessageBox, QGridLayout, QLineEdit, QProgressDialog,
-    QTreeWidget, QTreeWidgetItem, QSplitter, QFrame, QScrollArea
+    QTreeWidget, QTreeWidgetItem, QSplitter, QFrame, QScrollArea,
+    QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QThread, QTimer
 from PySide6.QtGui import QFont, QIcon
@@ -23,18 +24,20 @@ class JobDetailsDialog(QDialog):
     job_archived = Signal(dict)
     job_deleted = Signal()
     
-    def __init__(self, job_data, base_path, parent=None):
+    def __init__(self, job_data, base_path, parent=None, is_archived=False):
         super().__init__(parent)
         self.job_data = job_data.copy()
         self.base_path = base_path
+        self.is_archived = is_archived
         self.network_path = r"Z:\3 Encoding and Printing Files\Customers Encoding Files"
         
-        self.setWindowTitle(f"Job Details: {job_data.get('Job Ticket#', 'N/A')}")
+        # Update window title to indicate if this is an archived job
+        job_ticket = job_data.get('Job Ticket#', job_data.get('Ticket#', 'N/A'))
+        title_prefix = "Archived Job Details" if is_archived else "Job Details"
+        self.setWindowTitle(f"{title_prefix}: {job_ticket}")
         self.setMinimumSize(700, 500)
         self.resize(800, 550)
         self.setModal(True)
-        # Remove custom stylesheet to inherit application theme
-        # self.setStyleSheet(self.get_stylesheet())
         
         self.job_fields_read = {}
         self.encoding_fields_read = {}
@@ -174,33 +177,47 @@ class JobDetailsDialog(QDialog):
         # RIGHT SIDE: Action buttons (vertically stacked)
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
+        button_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Align buttons to top
         
         self.edit_btn = QPushButton("Edit Job")
         self.edit_btn.setMaximumHeight(30)
-        self.edit_btn.setMaximumWidth(120)
+        self.edit_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         self.edit_btn.clicked.connect(self.enter_edit_mode)
         
-        complete_btn = QPushButton("Complete Job")
-        complete_btn.setMaximumHeight(30)
-        complete_btn.setMaximumWidth(120)
-        complete_btn.clicked.connect(self.complete_job)
+        self.complete_btn = QPushButton("Complete Job")
+        self.complete_btn.setMaximumHeight(30)
+        self.complete_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        self.complete_btn.clicked.connect(self.complete_job)
 
-        archive_btn = QPushButton("Archive Job")
-        archive_btn.setMaximumHeight(30)
-        archive_btn.setMaximumWidth(120)
-        archive_btn.clicked.connect(self.archive_job)
+        self.archive_btn = QPushButton("Archive Job")
+        self.archive_btn.setMaximumHeight(30)
+        self.archive_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        self.archive_btn.clicked.connect(self.archive_job)
 
-        delete_btn = QPushButton("Delete Job")
-        delete_btn.setObjectName("deleteButton")
-        delete_btn.setProperty("class", "danger")  # Use qt_material danger styling
-        delete_btn.setMaximumHeight(30)
-        delete_btn.setMaximumWidth(120)
-        delete_btn.clicked.connect(self.delete_job)
+        self.delete_btn = QPushButton("Delete Job")
+        self.delete_btn.setObjectName("deleteButton")
+        self.delete_btn.setProperty("class", "danger")  # Use qt_material danger styling
+        self.delete_btn.setMaximumHeight(30)
+        self.delete_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        self.delete_btn.clicked.connect(self.delete_job)
+        
+        # Configure buttons based on archive status
+        if self.is_archived:
+            # Disable editing and job state changes for archived jobs
+            self.edit_btn.setEnabled(False)
+            self.edit_btn.setToolTip("Editing is disabled for archived jobs")
+            self.complete_btn.setEnabled(False)
+            self.complete_btn.setToolTip("Job is already archived")
+            self.archive_btn.setEnabled(False)
+            self.archive_btn.setToolTip("Job is already archived")
+            # Keep delete button enabled for archived jobs (allows permanent deletion)
+            self.delete_btn.setText("Delete Archive")
+            self.delete_btn.setToolTip("Permanently delete this archived job")
         
         button_layout.addWidget(self.edit_btn)
-        button_layout.addWidget(complete_btn)
-        button_layout.addWidget(archive_btn)
-        button_layout.addWidget(delete_btn)
+        button_layout.addWidget(self.complete_btn)
+        button_layout.addWidget(self.archive_btn)
+        button_layout.addWidget(self.delete_btn)
         
         # Add both sides to the main layout with proper spacing
         layout.addLayout(info_layout, 3)  # Give info section more space
@@ -291,10 +308,18 @@ class JobDetailsDialog(QDialog):
         dir_actions_layout = QHBoxLayout()
         self.open_dir_btn = QPushButton("Open Job Folder")
         self.open_dir_btn.setMaximumHeight(30)
+        self.open_dir_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         self.open_dir_btn.clicked.connect(self.open_job_folder)
         self.create_dir_btn = QPushButton("Create Job Folder")
         self.create_dir_btn.setMaximumHeight(30)
+        self.create_dir_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         self.create_dir_btn.clicked.connect(self.create_job_directory)
+        
+        # Disable create folder button for archived jobs
+        if self.is_archived:
+            self.create_dir_btn.setEnabled(False)
+            self.create_dir_btn.setToolTip("Cannot create folders for archived jobs")
+        
         dir_actions_layout.addWidget(self.open_dir_btn)
         dir_actions_layout.addWidget(self.create_dir_btn)
         actions_layout.addLayout(dir_actions_layout)
@@ -307,14 +332,22 @@ class JobDetailsDialog(QDialog):
         
         # Checklist Actions
         checklist_layout = QHBoxLayout()
-        open_checklist_btn = QPushButton("Open Checklist PDF")
-        open_checklist_btn.setMaximumHeight(30)
-        open_checklist_btn.clicked.connect(self.open_checklist)
-        regen_checklist_btn = QPushButton("Regenerate Checklist")
-        regen_checklist_btn.setMaximumHeight(30)
-        regen_checklist_btn.clicked.connect(self.regenerate_checklist)
-        checklist_layout.addWidget(open_checklist_btn)
-        checklist_layout.addWidget(regen_checklist_btn)
+        self.open_checklist_btn = QPushButton("Open Checklist PDF")
+        self.open_checklist_btn.setMaximumHeight(30)
+        self.open_checklist_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        self.open_checklist_btn.clicked.connect(self.open_checklist)
+        self.regen_checklist_btn = QPushButton("Regenerate Checklist")
+        self.regen_checklist_btn.setMaximumHeight(30)
+        self.regen_checklist_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        self.regen_checklist_btn.clicked.connect(self.regenerate_checklist)
+        
+        # Disable regeneration for archived jobs (but keep open functionality)
+        if self.is_archived:
+            self.regen_checklist_btn.setEnabled(False)
+            self.regen_checklist_btn.setToolTip("Cannot regenerate checklists for archived jobs")
+        
+        checklist_layout.addWidget(self.open_checklist_btn)
+        checklist_layout.addWidget(self.regen_checklist_btn)
         actions_layout.addLayout(checklist_layout)
         
         left_layout.addWidget(actions_group)
@@ -356,6 +389,7 @@ class JobDetailsDialog(QDialog):
         # Refresh Button
         refresh_btn = QPushButton("Refresh File Explorer")
         refresh_btn.setMaximumHeight(30)
+        refresh_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         refresh_btn.clicked.connect(self.refresh_file_tree)
         right_layout.addWidget(refresh_btn)
         
@@ -542,10 +576,12 @@ class JobDetailsDialog(QDialog):
         save_btn.setObjectName("saveButton")
         save_btn.setProperty("class", "success")  # Use qt_material success styling
         save_btn.setMaximumHeight(30)
+        save_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         save_btn.clicked.connect(self.save_changes)
         
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setMaximumHeight(30)
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         cancel_btn.clicked.connect(self.cancel_edit)
         
         button_layout.addStretch()
@@ -799,6 +835,9 @@ class JobDetailsDialog(QDialog):
         locations['shared_drive'] = self.network_path
         locations['desktop'] = os.path.expanduser("~/Desktop")
         
+        # Also check archive directory
+        locations['archive'] = config.ARCHIVE_DIR
+        
         # Also check custom path if it exists in job data
         if self.job_data.get('Custom Path'):
             locations['custom'] = self.job_data['Custom Path']
@@ -807,14 +846,27 @@ class JobDetailsDialog(QDialog):
 
         for loc, base_path in locations.items():
             try:
-                customer_path = os.path.join(base_path, customer)
-                label_path = os.path.join(customer_path, label_size)
-                
-                if os.path.exists(label_path):
-                    for folder in os.listdir(label_path):
-                        if po_num in folder and job_ticket in folder:
-                            found_paths[loc] = os.path.join(label_path, folder)
-                            break
+                if loc == 'archive':
+                    # For archive directory, search directly in the folder names
+                    # since archived jobs are stored as top-level folders with job info
+                    if os.path.exists(base_path):
+                        for folder in os.listdir(base_path):
+                            folder_path = os.path.join(base_path, folder)
+                            if os.path.isdir(folder_path):
+                                # Check if this folder contains the job info we're looking for
+                                if po_num in folder and job_ticket in folder:
+                                    found_paths[loc] = folder_path
+                                    break
+                else:
+                    # For other locations, use the traditional customer/label_size structure
+                    customer_path = os.path.join(base_path, customer)
+                    label_path = os.path.join(customer_path, label_size)
+                    
+                    if os.path.exists(label_path):
+                        for folder in os.listdir(label_path):
+                            if po_num in folder and job_ticket in folder:
+                                found_paths[loc] = os.path.join(label_path, folder)
+                                break
             except (OSError, PermissionError):
                 continue
         return found_paths
