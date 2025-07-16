@@ -45,7 +45,7 @@ class CollapsibleNavButton(QPushButton):
         if os.path.exists(self.icon_path):
             icon = QIcon(self.icon_path)
             self.setIcon(icon)
-            self.setIconSize(QSize(24, 24))
+            self.setIconSize(QSize(32, 32))
 
         self.setStyleSheet("""
             QPushButton {
@@ -70,7 +70,7 @@ class CollapsibleNavigationPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_collapsed = False
-        self.expanded_width = 180
+        self.expanded_width = 170
         self.collapsed_width = 60  # Adjusted for better spacing and icon visibility
         
         self.setFixedWidth(self.expanded_width)
