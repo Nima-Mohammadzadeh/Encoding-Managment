@@ -482,6 +482,10 @@
   ('code', 'C:\\Program Files (x86)\\Thonny\\lib\\code.py', 'PYMODULE'),
   ('codeop', 'C:\\Program Files (x86)\\Thonny\\lib\\codeop.py', 'PYMODULE'),
   ('colorsys', 'C:\\Program Files (x86)\\Thonny\\lib\\colorsys.py', 'PYMODULE'),
+  ('commctrl',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32\\lib\\commctrl.py',
+   'PYMODULE'),
   ('concurrent',
    'C:\\Program Files (x86)\\Thonny\\lib\\concurrent\\__init__.py',
    'PYMODULE'),
@@ -657,6 +661,42 @@
   ('fileinput',
    'C:\\Program Files (x86)\\Thonny\\lib\\fileinput.py',
    'PYMODULE'),
+  ('filelock',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\__init__.py',
+   'PYMODULE'),
+  ('filelock._api',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\_api.py',
+   'PYMODULE'),
+  ('filelock._error',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\_error.py',
+   'PYMODULE'),
+  ('filelock._soft',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\_soft.py',
+   'PYMODULE'),
+  ('filelock._unix',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\_unix.py',
+   'PYMODULE'),
+  ('filelock._util',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\_util.py',
+   'PYMODULE'),
+  ('filelock._windows',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\_windows.py',
+   'PYMODULE'),
+  ('filelock.asyncio',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\asyncio.py',
+   'PYMODULE'),
+  ('filelock.version',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\filelock\\version.py',
+   'PYMODULE'),
   ('fitz',
    'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\.venv\\lib\\site-packages\\fitz\\__init__.py',
@@ -747,6 +787,9 @@
    'C:\\Program Files (x86)\\Thonny\\lib\\importlib\\util.py',
    'PYMODULE'),
   ('inspect', 'C:\\Program Files (x86)\\Thonny\\lib\\inspect.py', 'PYMODULE'),
+  ('ipaddress',
+   'C:\\Program Files (x86)\\Thonny\\lib\\ipaddress.py',
+   'PYMODULE'),
   ('jinja2',
    'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\.venv\\lib\\site-packages\\jinja2\\__init__.py',
@@ -3588,6 +3631,18 @@
   ('platform', 'C:\\Program Files (x86)\\Thonny\\lib\\platform.py', 'PYMODULE'),
   ('plistlib', 'C:\\Program Files (x86)\\Thonny\\lib\\plistlib.py', 'PYMODULE'),
   ('pprint', 'C:\\Program Files (x86)\\Thonny\\lib\\pprint.py', 'PYMODULE'),
+  ('psutil',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\psutil\\__init__.py',
+   'PYMODULE'),
+  ('psutil._common',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\psutil\\_common.py',
+   'PYMODULE'),
+  ('psutil._pswindows',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\psutil\\_pswindows.py',
+   'PYMODULE'),
   ('py_compile',
    'C:\\Program Files (x86)\\Thonny\\lib\\py_compile.py',
    'PYMODULE'),
@@ -3630,6 +3685,10 @@
    'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\.venv\\lib\\site-packages\\pymupdf\\utils.py',
    'PYMODULE'),
+  ('pythoncom',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\pythoncom.py',
+   'PYMODULE'),
   ('pytz',
    'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\.venv\\lib\\site-packages\\pytz\\__init__.py',
@@ -3649,6 +3708,47 @@
   ('pytz.tzinfo',
    'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\.venv\\lib\\site-packages\\pytz\\tzinfo.py',
+   'PYMODULE'),
+  ('pywin',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\__init__.py',
+   'PYMODULE'),
+  ('pywin.dialogs',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\dialogs\\__init__.py',
+   'PYMODULE'),
+  ('pywin.dialogs.list',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\dialogs\\list.py',
+   'PYMODULE'),
+  ('pywin.dialogs.status',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\dialogs\\status.py',
+   'PYMODULE'),
+  ('pywin.mfc',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\mfc\\__init__.py',
+   'PYMODULE'),
+  ('pywin.mfc.dialog',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\mfc\\dialog.py',
+   'PYMODULE'),
+  ('pywin.mfc.object',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\mfc\\object.py',
+   'PYMODULE'),
+  ('pywin.mfc.thread',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\mfc\\thread.py',
+   'PYMODULE'),
+  ('pywin.mfc.window',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\Pythonwin\\pywin\\mfc\\window.py',
+   'PYMODULE'),
+  ('pywin32_system32', '-', 'PYMODULE'),
+  ('pywintypes',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32\\lib\\pywintypes.py',
    'PYMODULE'),
   ('qt_material',
    'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
@@ -3764,6 +3864,10 @@
    'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\src\\widgets\\global_search_dialog.py',
    'PYMODULE'),
+  ('src.widgets.interactive_calendar',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\src\\widgets\\interactive_calendar.py',
+   'PYMODULE'),
   ('src.widgets.interactive_roll_tracker_dialog',
    'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\src\\widgets\\interactive_roll_tracker_dialog.py',
@@ -3771,6 +3875,14 @@
   ('src.widgets.job_details_dialog',
    'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
    'Managment\\src\\widgets\\job_details_dialog.py',
+   'PYMODULE'),
+  ('src.widgets.job_selection_dialog',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\src\\widgets\\job_selection_dialog.py',
+   'PYMODULE'),
+  ('src.widgets.navigation_panel',
+   'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\src\\widgets\\navigation_panel.py',
    'PYMODULE'),
   ('src.widgets.roll_tracker_dialog',
    'C:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
@@ -3868,6 +3980,94 @@
   ('uuid', 'C:\\Program Files (x86)\\Thonny\\lib\\uuid.py', 'PYMODULE'),
   ('webbrowser',
    'C:\\Program Files (x86)\\Thonny\\lib\\webbrowser.py',
+   'PYMODULE'),
+  ('win32com',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\__init__.py',
+   'PYMODULE'),
+  ('win32com.client',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\__init__.py',
+   'PYMODULE'),
+  ('win32com.client.CLSIDToClass',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\CLSIDToClass.py',
+   'PYMODULE'),
+  ('win32com.client.build',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\build.py',
+   'PYMODULE'),
+  ('win32com.client.dynamic',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\dynamic.py',
+   'PYMODULE'),
+  ('win32com.client.gencache',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\gencache.py',
+   'PYMODULE'),
+  ('win32com.client.genpy',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\genpy.py',
+   'PYMODULE'),
+  ('win32com.client.makepy',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\makepy.py',
+   'PYMODULE'),
+  ('win32com.client.selecttlb',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\selecttlb.py',
+   'PYMODULE'),
+  ('win32com.client.util',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\client\\util.py',
+   'PYMODULE'),
+  ('win32com.server',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\server\\__init__.py',
+   'PYMODULE'),
+  ('win32com.server.dispatcher',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\server\\dispatcher.py',
+   'PYMODULE'),
+  ('win32com.server.exception',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\server\\exception.py',
+   'PYMODULE'),
+  ('win32com.server.policy',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\server\\policy.py',
+   'PYMODULE'),
+  ('win32com.server.util',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\server\\util.py',
+   'PYMODULE'),
+  ('win32com.shell',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32comext\\shell\\__init__.py',
+   'PYMODULE'),
+  ('win32com.shell.shellcon',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32comext\\shell\\shellcon.py',
+   'PYMODULE'),
+  ('win32com.universal',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\universal.py',
+   'PYMODULE'),
+  ('win32com.util',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32com\\util.py',
+   'PYMODULE'),
+  ('win32con',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32\\lib\\win32con.py',
+   'PYMODULE'),
+  ('win32traceutil',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32\\lib\\win32traceutil.py',
+   'PYMODULE'),
+  ('winerror',
+   'c:\\Users\\Encoding 3\\Desktop\\Projects\\Encoding '
+   'Managment\\.venv\\lib\\site-packages\\win32\\lib\\winerror.py',
    'PYMODULE'),
   ('xml', 'C:\\Program Files (x86)\\Thonny\\lib\\xml\\__init__.py', 'PYMODULE'),
   ('xml.dom',
