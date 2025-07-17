@@ -136,6 +136,7 @@ class MainWindow(QMainWindow):
         details_dialog = JobDetailsDialog(job_data, self.base_path, self)
         details_dialog.job_updated.connect(self.handle_job_updated)
         details_dialog.job_archived.connect(self.handle_job_archived)
+        details_dialog.job_deleted.connect(self.handle_job_deleted)
         details_dialog.exec()
 
     def handle_job_updated(self, updated_job_data):
@@ -148,6 +149,13 @@ class MainWindow(QMainWindow):
         """Handle the job_archived signal from JobDetailsDialog."""
         self.archive_page.add_archived_job(job_data)
         self.jobs_page.refresh_jobs_table()
+        self.dashboard_page.refresh_dashboard()
+
+    def handle_job_deleted(self, job_data):
+        """Handle the job_deleted signal from JobDetailsDialog."""
+        # Refresh the jobs page to reflect the deletion
+        self.jobs_page.refresh_jobs_table()
+        # Refresh the dashboard to update statistics
         self.dashboard_page.refresh_dashboard()
 
 if __name__ == "__main__":

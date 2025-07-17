@@ -711,9 +711,7 @@ class JobPageWidget(QWidget):
         # Connect signals to handle updates
         dialog.job_updated.connect(self.update_job_in_table)
         dialog.job_archived.connect(self.handle_job_archived)
-        dialog.job_deleted.connect(
-            lambda: self.delete_job_by_index(source_index)
-        )
+        dialog.job_deleted.connect(self.handle_job_deleted_from_details)
 
         # Automatically enter edit mode
         dialog.enter_edit_mode()
@@ -1141,7 +1139,7 @@ class JobPageWidget(QWidget):
         # Connect signals
         dialog.job_updated.connect(self.update_job_in_table)
         dialog.job_archived.connect(self.handle_job_archived)
-        dialog.job_deleted.connect(lambda: self.delete_job_by_row(source_index.row()))
+        dialog.job_deleted.connect(self.handle_job_deleted_from_details)
 
         dialog.exec()
 
@@ -1199,6 +1197,21 @@ class JobPageWidget(QWidget):
 
         # Ensure monitoring continues after archiving
         self.ensure_directory_monitoring()
+
+    def handle_job_deleted_from_details(self, job_data):
+        """Handle job being deleted from details dialog with the same logic as context menu."""
+        # Find the row in the source model that matches this job
+        for i in range(self.source_model.rowCount()):
+            row_job_data = self.source_model.item(i, 0).data(Qt.ItemDataRole.UserRole)
+            if row_job_data and row_job_data.get("job_folder_path") == job_data.get("job_folder_path"):
+                # Use the same deletion logic as delete_job_by_index
+                self._delete_job_files(job_data)
+                # Remove from the source model and active list
+                self.source_model.removeRow(i)
+                self.all_jobs = [j for j in self.all_jobs if j.get('job_folder_path') != job_data.get('job_folder_path')]
+                # Ensure monitoring continues after deletion
+                self.ensure_directory_monitoring()
+                break
 
     def delete_job_by_row(self, row):
         """Delete job by row index, including all its files."""

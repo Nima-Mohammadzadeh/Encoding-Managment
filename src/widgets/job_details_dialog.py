@@ -22,7 +22,7 @@ import src.config as config
 class JobDetailsDialog(QDialog):
     job_updated = Signal(dict)
     job_archived = Signal(dict)
-    job_deleted = Signal()
+    job_deleted = Signal(dict)  # Pass job data for proper deletion handling
     
     def __init__(self, job_data, base_path, parent=None, is_archived=False):
         super().__init__(parent)
@@ -935,11 +935,16 @@ class JobDetailsDialog(QDialog):
             self.accept()
 
     def delete_job(self):
-        reply = QMessageBox.question(self, "Delete Job", 
-                                   "Are you sure you want to permanently delete this job and all its files?",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        """Delete job with the same logic as the jobs page context menu."""
+        reply = QMessageBox.question(
+            self, 
+            "Confirmation",
+            f"Are you sure you want to permanently delete this job and all its associated files?\n\nJob: {self.job_data.get('PO#')} - {self.job_data.get('Job Ticket#', self.job_data.get('Ticket#', ''))}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
         if reply == QMessageBox.StandardButton.Yes:
-            self.job_deleted.emit()
+            # Emit the signal with the job data so the parent can handle the deletion
+            self.job_deleted.emit(self.job_data)
             self.accept()
 
     def create_job_directory(self):
