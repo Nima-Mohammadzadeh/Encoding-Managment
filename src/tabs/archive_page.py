@@ -27,7 +27,7 @@ from src.widgets.job_details_dialog import JobDetailsDialog, FileOperationProgre
 import src.config as config
 
 from PySide6.QtGui import QStandardItem, QStandardItemModel, QFont, QIcon
-from PySide6.QtCore import Qt, QDate, QTimer, Signal
+from PySide6.QtCore import Qt, QDate, QTimer, Signal, QSortFilterProxyModel
 
 class ArchivePageWidget(QWidget):
     job_was_archived = Signal()
@@ -166,17 +166,21 @@ class ArchivePageWidget(QWidget):
 
     def setup_results_table(self):
         """Set up the results table with proper formatting and functionality."""
-        self.model = QStandardItemModel()
+        self.source_model = QStandardItemModel()
         # Removed Status column, reordered for better space utilization
         # Updated headers: "Inlay Type" → "Inlay", "Label Size" → "Size"
         self.headers = [
             "Customer", "Ticket#", "PO#", "Part#", 
             "Inlay", "Size", "Qty", "Archived Date"
         ]
-        self.model.setHorizontalHeaderLabels(self.headers)
+        self.source_model.setHorizontalHeaderLabels(self.headers)
+        
+        # Create proxy model for sorting
+        self.proxy_model = QSortFilterProxyModel()
+        self.proxy_model.setSourceModel(self.source_model)
         
         self.jobs_table = QTableView()
-        self.jobs_table.setModel(self.model)
+        self.jobs_table.setModel(self.proxy_model)  # Set proxy model instead of source model
         self.jobs_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.jobs_table.setAlternatingRowColors(True)
         self.jobs_table.setSortingEnabled(True)
@@ -237,7 +241,7 @@ class ArchivePageWidget(QWidget):
 
     def apply_filters(self):
         """Apply all active filters and search criteria."""
-        self.model.removeRows(0, self.model.rowCount())
+        self.source_model.removeRows(0, self.source_model.rowCount())
         self.filtered_jobs = []
         
         search_text = self.search_input.text().lower().strip()
@@ -386,7 +390,11 @@ class ArchivePageWidget(QWidget):
             QStandardItem(str(quantity)),
             QStandardItem(archived_date)
         ]
-        self.model.appendRow(row_items)
+        
+        # Store the complete job data in the first column's item
+        row_items[0].setData(job_data, Qt.ItemDataRole.UserRole)
+        
+        self.source_model.appendRow(row_items)
 
     def load_jobs(self):
         """Load all archived jobs from the archive directory."""
@@ -523,8 +531,11 @@ class ArchivePageWidget(QWidget):
         if not index.isValid():
             return
 
-        row = index.row()
-        job_data = self._get_job_data_for_row(row)
+        # Map the proxy index to source index
+        source_index = self.proxy_model.mapToSource(index)
+        
+        # Get the job data from the first column's UserRole data
+        job_data = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
         
         if not job_data:
             QMessageBox.warning(self, "Error", "Could not retrieve job data.")
@@ -532,16 +543,37 @@ class ArchivePageWidget(QWidget):
 
         # Create dialog with is_archived=True to properly configure it for archived jobs
         dialog = JobDetailsDialog(job_data, self.base_path, self, is_archived=True)
-        
         dialog.exec()
 
     def _get_job_data_for_row(self, row):
         """Get the full job data for a specific table row."""
-        if row < 0 or row >= len(self.filtered_jobs):
+        # Map the row index to source model
+        source_index = self.proxy_model.mapToSource(self.proxy_model.index(row, 0))
+        if not source_index.isValid():
             return None
+            
+        # Get the job data from the UserRole data
+        return self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
 
-        # Since we're displaying filtered jobs in order, we can directly index
-        return self.filtered_jobs[row]
+    def contextMenuEvent(self, event):
+        """Handle right-click context menu."""
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+            
+        menu = QMenu(self)
+        
+        # Get the correct source index for the selected row
+        proxy_index = selection_model.selectedRows()[0]
+        source_index = self.proxy_model.mapToSource(proxy_index)
+        
+        # Get job data using the source index
+        job_data = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
+        
+        menu.addAction("View Details", lambda: self.open_job_details(proxy_index))
+        menu.addSeparator()
+        menu.addAction("Delete Job", self.delete_selected_job)
+        menu.exec(event.globalPos())
 
     def delete_selected_job(self):
         """Delete the selected archived job."""
@@ -557,8 +589,12 @@ class ArchivePageWidget(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
             
-        selected_row_index = selection_model.selectedRows()[0]
-        job_to_remove = self._get_job_data_for_row(selected_row_index.row())
+        # Get the correct source index for the selected row
+        proxy_index = selection_model.selectedRows()[0]
+        source_index = self.proxy_model.mapToSource(proxy_index)
+        
+        # Get job data using the source index
+        job_to_remove = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
         
         if not job_to_remove:
             QMessageBox.warning(self, "Error", "Could not find job data to delete.")
@@ -568,7 +604,7 @@ class ArchivePageWidget(QWidget):
         if job_folder_path and os.path.exists(job_folder_path):
             # Store data for callback
             self.temp_delete_job_data = job_to_remove
-            self.temp_delete_row_index = selected_row_index.row()
+            self.temp_delete_source_index = source_index  # Store source index instead of row
             
             # Use threaded deletion for potentially large folders
             progress_dialog = FileOperationProgressDialog(
@@ -589,36 +625,24 @@ class ArchivePageWidget(QWidget):
             return
             
         job_to_remove = self.temp_delete_job_data
-        row_index = self.temp_delete_row_index
+        source_index = self.temp_delete_source_index  # Use stored source index
         
         # Clean up temporary data
         delattr(self, 'temp_delete_job_data')
-        delattr(self, 'temp_delete_row_index')
+        delattr(self, 'temp_delete_source_index')
         
         if success:
-            # Remove from the main jobs list
+            # Remove from the source model using the source index
+            self.source_model.removeRow(source_index.row())
+            
+            # Remove from the all_jobs list - find by job folder path to ensure correct removal
             job_folder_path = job_to_remove.get('job_folder_path')
             self.all_jobs = [j for j in self.all_jobs if j.get('job_folder_path') != job_folder_path]
             
-            # Refresh the display
-            self.apply_filters()
-            
             QMessageBox.information(self, "Deleted", "Archived job has been permanently deleted.")
-            self.job_was_deleted.emit() # Emit the new signal
+            self.job_was_deleted.emit()
         else:
             QMessageBox.critical(self, "Delete Error", f"Could not delete job folder:\n{message}")
-
-    def contextMenuEvent(self, event):
-        """Handle right-click context menu."""
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-            
-        menu = QMenu(self)
-        menu.addAction("View Details", lambda: self.open_job_details(selection_model.selectedRows()[0]))
-        menu.addSeparator()
-        menu.addAction("Delete Job", self.delete_selected_job)
-        menu.exec(event.globalPos())
 
     def save_data(self):
         """Legacy method - data is now saved as individual JSON files."""

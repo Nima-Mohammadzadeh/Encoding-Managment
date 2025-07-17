@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 import fitz
 import pymupdf, shutil, os, sys
 from PySide6.QtGui import QStandardItem, QStandardItemModel
-from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer, QThread, QObject
+from PySide6.QtCore import Qt, Signal, QFileSystemWatcher, QTimer, QThread, QObject, QSortFilterProxyModel
 from src.wizards.new_job_wizard import NewJobWizard
 from src.widgets.job_details_dialog import JobDetailsDialog, EPCProgressDialog, FileOperationProgressDialog, PDFProgressDialog
 from src.widgets.interactive_roll_tracker_dialog import InteractiveRollTrackerDialog
@@ -136,7 +136,8 @@ class JobPageWidget(QWidget):
         actions_layout.addStretch()
         layout.addLayout(actions_layout)
 
-        self.model = QStandardItemModel()
+        # Create source model
+        self.source_model = QStandardItemModel()
         self.headers = [
             "Customer",
             "Part#",
@@ -147,10 +148,14 @@ class JobPageWidget(QWidget):
             "Qty",
             "Due Date",
         ]
-        self.model.setHorizontalHeaderLabels(self.headers)
+        self.source_model.setHorizontalHeaderLabels(self.headers)
+
+        # Create proxy model for sorting
+        self.proxy_model = QSortFilterProxyModel()
+        self.proxy_model.setSourceModel(self.source_model)
 
         self.jobs_table = QTableView()
-        self.jobs_table.setModel(self.model)
+        self.jobs_table.setModel(self.proxy_model)  # Set proxy model instead of source model
         self.jobs_table.setAlternatingRowColors(True)
         self.jobs_table.setSortingEnabled(True)
         self.jobs_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -472,7 +477,7 @@ class JobPageWidget(QWidget):
         print(f"  UPC: {upc_number}")
         print(f"  Current table size: {len(self.all_jobs)} jobs")
 
-        # Check for duplicates using the new comprehensive method
+        # Check for duplicates using the comprehensive method
         is_duplicate, conflict_type, conflicting_job = self.check_for_duplicate_job(job_data)
         
         if is_duplicate:
@@ -494,7 +499,7 @@ class JobPageWidget(QWidget):
                     f"  Ticket#: {conflict_ticket}\n\n"
                     f"Ticket numbers must be unique. Please use a different ticket number."
                 )
-                return False  # Indicate failure
+                return False
             
             elif conflict_type == "upc_conflict":
                 print(f"UPC CONFLICT REJECTED: UPC {upc_number} already in use")
@@ -509,7 +514,7 @@ class JobPageWidget(QWidget):
                     f"  Ticket#: {conflict_ticket}\n\n"
                     f"Each UPC number must be unique. Please use a different UPC number."
                 )
-                return False  # Indicate failure
+                return False
         
         # If we get here, it's not a duplicate - proceed with adding
         print(f"  No conflicts found - proceeding to add job")
@@ -535,12 +540,16 @@ class JobPageWidget(QWidget):
             QStandardItem(formatted_quantity),
             QStandardItem(due_date_formatted),
         ]
-        self.model.appendRow(row_items)
+        
+        # Store the complete job data in the first column's item
+        row_items[0].setData(job_data, Qt.ItemDataRole.UserRole)
+        
+        self.source_model.appendRow(row_items)
         # Add the full job data to our source of truth list
         self.all_jobs.append(job_data)
         print(f"SUCCESS: Added job to table - Customer: {customer}, PO#: {po_number}, Ticket#: {job_ticket}")
         print(f"Table now contains {len(self.all_jobs)} jobs")
-        return True  # Indicate success
+        return True
 
     def format_date_for_display(self, date_string):
         """Convert date from ISO format (yyyy-mm-dd) to mm/dd/yyyy format."""
@@ -616,7 +625,7 @@ class JobPageWidget(QWidget):
 
         # Clear existing data
         self.all_jobs = []
-        self.model.removeRows(0, self.model.rowCount())
+        self.source_model.removeRows(0, self.source_model.rowCount())
 
         # Add jobs to table (with duplicate checks)
         for job_data in loaded_jobs:
@@ -655,165 +664,41 @@ class JobPageWidget(QWidget):
 
         menu = QMenu(self)
 
+        # Get the correct source index for the selected row
+        proxy_index = selection_model.selectedRows()[0]
+        source_index = self.proxy_model.mapToSource(proxy_index)
+        
+        # Get job data using the source index
+        job_data = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
+
         menu.addAction(
             "Create Job Folder...",
             self.create_folder_for_selected_job_with_location_picker,
         )
-        menu.addAction("Edit Job", self.edit_selected_job_in_details)
+        menu.addAction("Edit Job", lambda: self.edit_selected_job_in_details(source_index))
         menu.addSeparator()
 
         # Add Roll Tracker option
-        menu.addAction("Open Roll Tracker", self.open_roll_tracker)
+        menu.addAction("Open Roll Tracker", lambda: self.open_roll_tracker_for_job(job_data))
         menu.addSeparator()
 
         # Check if job has UPC and can generate EPC database
-        selected_row_index = selection_model.selectedRows()[0]
-        job_data = self._get_job_data_for_row(selected_row_index.row())
         upc = job_data.get("UPC Number", "")
         if upc and validate_upc(upc):
             menu.addAction(
-                "Generate EPC Database...", self.generate_epc_for_selected_job
+                "Generate EPC Database...", 
+                lambda: self.generate_epc_for_job(job_data, source_index)
             )
             menu.addSeparator()
 
-        menu.addAction("Move to Archive", self.move_to_archive)
-        menu.addAction("Delete Job", self.delete_selected_job)
+        menu.addAction("Move to Archive", lambda: self.move_to_archive_for_job(source_index))
+        menu.addAction("Delete Job", lambda: self.delete_job_by_index(source_index))
 
         menu.exec(event.globalPos())
 
-    def create_folder_for_selected_job_with_location_picker(self):
-        """Create job folder with user-selected directory location."""
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-
-        selected_row_index = selection_model.selectedRows()[0]
-
-        job_data = {}
-        for col, header in enumerate(self.headers):
-            cell_index = self.model.index(selected_row_index.row(), col)
-            cell_value = self.model.data(cell_index, Qt.DisplayRole)
-
-            # Map display headers back to data keys for backward compatibility
-            if header == "Ticket#":
-                job_data["Job Ticket#"] = cell_value  # Use old key for compatibility
-            elif header == "Qty":
-                job_data["Quantity"] = cell_value  # Use old key for compatibility
-            else:
-                job_data[header] = cell_value
-
-        # Let user select where to create the job folder
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Directory to Create Job Folder",
-            "",
-            QFileDialog.Option.ShowDirsOnly,
-        )
-
-        if not directory:
-            return  # User cancelled
-
-        try:
-            customer = job_data.get("Customer", "UnknownCustomer")
-            label_size = job_data.get("Label Size", "UnknownLabelSize")
-            po_num = job_data.get("PO#", "UnknownPO")
-            job_ticket_num = job_data.get("Ticket#", "UnknownTicket")
-
-            # Use current date for folder creation
-            current_date = datetime.now().strftime("%y-%m-%d")
-            job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
-
-            # Create the directory structure: Selected Dir / Customer / Label Size / Job Folder
-            customer_path = os.path.join(directory, customer)
-            label_size_path = os.path.join(customer_path, label_size)
-            job_path = os.path.join(label_size_path, job_folder_name)
-
-            # Create directories if they don't exist
-            os.makedirs(customer_path, exist_ok=True)
-            os.makedirs(label_size_path, exist_ok=True)
-
-            if os.path.exists(job_path):
-                QMessageBox.warning(
-                    self, "Warning", f"Job folder already exists:\n{job_path}"
-                )
-                return
-
-            os.makedirs(job_path)
-
-            # Get the full job data for creating JSON and PDF
-            full_job_data = self._get_job_data_for_row(selected_row_index.row())
-            if full_job_data:
-                # For folder creation, use the current data from table with proper field mapping
-                folder_job_data = {}
-                for col, header in enumerate(self.headers):
-                    cell_index = self.model.index(selected_row_index.row(), col)
-                    cell_value = self.model.data(cell_index, Qt.DisplayRole)
-
-                    # Map display headers back to data keys for folder creation
-                    if header == "Ticket#":
-                        folder_job_data["Job Ticket#"] = (
-                            cell_value  # Use old key for folder naming
-                        )
-                    elif header == "Qty":
-                        folder_job_data["Quantity"] = (
-                            cell_value  # Use old key for data consistency
-                        )
-                    else:
-                        folder_job_data[header] = cell_value
-
-                # Use current date for folder creation
-                current_date = datetime.now().strftime("%y-%m-%d")
-                customer = folder_job_data.get("Customer", "UnknownCustomer")
-                label_size = folder_job_data.get("Label Size", "UnknownLabelSize")
-                po_num = folder_job_data.get("PO#", "UnknownPO")
-                job_ticket_num = folder_job_data.get("Job Ticket#", "UnknownTicket")
-                job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
-
-                # Create the directory structure: Selected Dir / Customer / Label Size / Job Folder
-                customer_path = os.path.join(directory, customer)
-                label_size_path = os.path.join(customer_path, label_size)
-                job_path = os.path.join(label_size_path, job_folder_name)
-
-                # Create directories if they don't exist
-                os.makedirs(customer_path, exist_ok=True)
-                os.makedirs(label_size_path, exist_ok=True)
-
-                if os.path.exists(job_path):
-                    QMessageBox.warning(
-                        self, "Warning", f"Job folder already exists:\n{job_path}"
-                    )
-                    return
-
-                os.makedirs(job_path)
-
-                # Save job data JSON in the new folder (preserve full job data structure)
-                full_job_data["job_folder_path"] = job_path
-                try:
-                    with open(os.path.join(job_path, "job_data.json"), "w") as f:
-                        json.dump(full_job_data, f, indent=4)
-                except IOError as e:
-                    print(f"Could not save job_data.json: {e}")
-
-                # Create checklist PDF
-                self.create_checklist_pdf(full_job_data, job_path)
-
-            QMessageBox.information(
-                self, "Success", f"Job folder created successfully at:\n{job_path}"
-            )
-            print(f"Successfully created job folder: {job_path}")
-
-        except Exception as e:
-            print(f"Error creating job folder: {e}")
-            QMessageBox.critical(self, "Error", f"Could not create job folder:\n{e}")
-
-    def edit_selected_job_in_details(self):
+    def edit_selected_job_in_details(self, source_index):
         """Open the job details dialog in edit mode for the selected job."""
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-
-        selected_row_index = selection_model.selectedRows()[0]
-        job_data = self._get_job_data_for_row(selected_row_index.row())
+        job_data = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
 
         if not job_data:
             QMessageBox.warning(self, "Error", "Could not retrieve job data.")
@@ -826,7 +711,7 @@ class JobPageWidget(QWidget):
         dialog.job_updated.connect(self.update_job_in_table)
         dialog.job_archived.connect(self.handle_job_archived)
         dialog.job_deleted.connect(
-            lambda: self.delete_job_by_row(selected_row_index.row())
+            lambda: self.delete_job_by_index(source_index)
         )
 
         # Automatically enter edit mode
@@ -834,15 +719,8 @@ class JobPageWidget(QWidget):
 
         dialog.exec()
 
-    def open_roll_tracker(self):
-        """Open the interactive roll tracker for the selected job."""
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-
-        selected_row_index = selection_model.selectedRows()[0]
-        job_data = self._get_job_data_for_row(selected_row_index.row())
-
+    def open_roll_tracker_for_job(self, job_data):
+        """Open the interactive roll tracker for the given job."""
         if job_data:
             # Check if the job has the required data for roll tracking
             quantity = job_data.get('Quantity', job_data.get('Qty', 0))
@@ -856,42 +734,8 @@ class JobPageWidget(QWidget):
             tracker_dialog = InteractiveRollTrackerDialog(job_data, self)
             tracker_dialog.show()  # Use show() instead of exec() to make it non-modal
 
-    def delete_selected_job(self):
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-
-        selected_row_index = selection_model.selectedRows()[0]
-        job_to_delete = self._get_job_data_for_row(selected_row_index.row())
-
-        if not job_to_delete:
-            QMessageBox.warning(self, "Error", "Could not find job data to delete.")
-            return
-
-        reply = QMessageBox.question(
-            self,
-            "Confirmation",
-            f"Are you sure you want to permanently delete this job and all its associated files?\n\nJob: {job_to_delete.get('PO#')} - {self.get_job_data_value(job_to_delete, 'Ticket#', 'Job Ticket#')}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self._delete_job_files(job_to_delete)
-            # Remove from the in-memory list and the table view
-            del self.all_jobs[selected_row_index.row()]
-            self.model.removeRow(selected_row_index.row())
-
-        # Ensure monitoring continues after deletion
-        self.ensure_directory_monitoring()
-
-    def generate_epc_for_selected_job(self):
-        """Generate EPC database files for an existing job."""
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-
-        selected_row_index = selection_model.selectedRows()[0]
-        job_data = self._get_job_data_for_row(selected_row_index.row())
-
+    def generate_epc_for_job(self, job_data, source_index):
+        """Generate EPC database files for the given job."""
         if not job_data:
             QMessageBox.warning(self, "Error", "Could not retrieve job data.")
             return
@@ -995,7 +839,7 @@ class JobPageWidget(QWidget):
             'job_data': job_data,
             'job_folder_path': job_folder_path,
             'data_folder_path': data_folder_path,
-            'selected_row': selected_row_index.row(),
+            'source_index': source_index,  # Store source index instead of row
             'total_qty': total_qty
         }
 
@@ -1010,98 +854,8 @@ class JobPageWidget(QWidget):
         # Show the dialog
         self.epc_progress_dialog.exec()
 
-    def on_existing_job_epc_finished(self, success, result):
-        """Handle completion of EPC generation for existing job."""
-        if not hasattr(self, 'temp_epc_params'):
-            return
-            
-        params = self.temp_epc_params
-        job_data = params['job_data']
-        job_folder_path = params['job_folder_path']
-        data_folder_path = params['data_folder_path']
-        selected_row = params['selected_row']
-        total_qty = params['total_qty']
-        
-        # Clean up temporary parameters
-        delattr(self, 'temp_epc_params')
-        
-        if success:
-            # result is the list of created files
-            created_files = result
-            
-            # Update job data with EPC information
-            job_data["epc_files_created"] = len(created_files)
-            job_data["total_qty_with_buffers"] = total_qty
-            job_data["epc_generation_date"] = datetime.now().isoformat()
-
-            # Save updated job data
-            job_data_path = os.path.join(job_folder_path, "job_data.json")
-            try:
-                with open(job_data_path, "w") as f:
-                    json.dump(job_data, f, indent=4)
-
-                # Update the in-memory data
-                self.all_jobs[selected_row] = job_data
-
-                # Also update active source directory if it exists
-                try:
-                    customer = job_data.get("Customer", "")
-                    label_size = job_data.get("Label Size", "")
-                    folder_name = os.path.basename(job_folder_path)
-                    active_source_path = os.path.join(
-                        config.ACTIVE_JOBS_SOURCE_DIR, customer, label_size, folder_name
-                    )
-
-                    if os.path.exists(active_source_path):
-                        # Update the job_data.json in active source
-                        active_job_data_path = os.path.join(
-                            active_source_path, "job_data.json"
-                        )
-                        with open(active_job_data_path, "w") as f:
-                            json.dump(job_data, f, indent=4)
-
-                        # Copy new EPC files to active source
-                        active_data_path = os.path.join(active_source_path, "data")
-                        if not os.path.exists(active_data_path):
-                            os.makedirs(active_data_path, exist_ok=True)
-
-                        for file_path in created_files:
-                            file_name = os.path.basename(file_path)
-                            shutil.copy2(
-                                file_path, os.path.join(active_data_path, file_name)
-                            )
-                except Exception as e:
-                    print(f"Warning: Could not update active source directory: {e}")
-
-                QMessageBox.information(
-                    self,
-                    "EPC Generation Complete",
-                    f"Successfully generated {len(created_files)} EPC database files.\n"
-                    f"Total quantity (with buffers): {total_qty:,}\n"
-                    f"Files saved to: {data_folder_path}",
-                )
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "File Save Error", f"Could not save job data:\n{e}"
-                )
-        else:
-            # result is the error message
-            error_message = result
-            if "cancelled" not in error_message.lower():
-                QMessageBox.critical(
-                    self, "EPC Generation Error", f"Failed to generate EPC database:\n{error_message}"
-                )
-
-    def _get_job_data_for_row(self, row):
-        if 0 <= row < len(self.all_jobs):
-            return self.all_jobs[row]
-        return None
-
-    def move_to_archive(self):
-        selection_model = self.jobs_table.selectionModel()
-        if not selection_model.hasSelection():
-            return
-
+    def move_to_archive_for_job(self, source_index):
+        """Move the specified job to archive."""
         reply = QMessageBox.question(
             self,
             "Confirmation",
@@ -1111,9 +865,7 @@ class JobPageWidget(QWidget):
         if reply == QMessageBox.StandardButton.No:
             return
 
-        selected_row = selection_model.selectedRows()[0].row()
-        job_data = self._get_job_data_for_row(selected_row)
-
+        job_data = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
         job_folder_path = job_data.get("job_folder_path")
 
         if not job_folder_path or not os.path.exists(job_folder_path):
@@ -1122,8 +874,6 @@ class JobPageWidget(QWidget):
                 "Archive Error",
                 "Original job folder not found or path not set. Cannot archive.",
             )
-            # We should also check the active source folder and offer to archive from there.
-            # For now, we stick to the original logic.
             return
 
         # Set archive date and status before sending to archive
@@ -1141,31 +891,158 @@ class JobPageWidget(QWidget):
         # Since it's archived, we delete it from the active jobs directories
         self._delete_job_files(job_data)
 
-        # Remove the job from the active list
-        self.model.removeRow(selected_row)
-        del self.all_jobs[selected_row]
+        # Remove the job from the source model and active list
+        self.source_model.removeRow(source_index.row())
+        self.all_jobs = [j for j in self.all_jobs if j.get('job_folder_path') != job_folder_path]
 
         # Ensure monitoring continues after archiving
         self.ensure_directory_monitoring()
 
         QMessageBox.information(self, "Success", "Job has been successfully archived.")
 
-    def handle_new_job_creation(self, job_data, save_locations):
-        """
-        This function is called when a new job is created.
-        It will create a new job folder and fill the checklist with the job data.
-        """
-        try:
-            job_path = self._create_job_folders(job_data, save_locations)
+    def delete_job_by_index(self, source_index):
+        """Delete job by source model index, including all its files."""
+        job_data = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
 
-            if not job_path:
+        if not job_data:
+            QMessageBox.warning(self, "Error", "Could not find job data to delete.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirmation",
+            f"Are you sure you want to permanently delete this job and all its associated files?\n\nJob: {job_data.get('PO#')} - {self.get_job_data_value(job_data, 'Ticket#', 'Job Ticket#')}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._delete_job_files(job_data)
+            # Remove from the source model and active list
+            self.source_model.removeRow(source_index.row())
+            self.all_jobs = [j for j in self.all_jobs if j.get('job_folder_path') != job_data.get('job_folder_path')]
+
+            # Ensure monitoring continues after deletion
+            self.ensure_directory_monitoring()
+
+    def create_folder_for_selected_job_with_location_picker(self):
+        """Create job folder with user-selected directory location."""
+        selection_model = self.jobs_table.selectionModel()
+        if not selection_model.hasSelection():
+            return
+
+        selected_row_index = selection_model.selectedRows()[0]
+
+        job_data = {}
+        for col, header in enumerate(self.headers):
+            cell_index = self.source_model.index(selected_row_index.row(), col)
+            cell_value = self.source_model.data(cell_index, Qt.DisplayRole)
+
+            # Map display headers back to data keys for backward compatibility
+            if header == "Ticket#":
+                job_data["Job Ticket#"] = cell_value  # Use old key for compatibility
+            elif header == "Qty":
+                job_data["Quantity"] = cell_value  # Use old key for compatibility
+            else:
+                job_data[header] = cell_value
+
+        # Let user select where to create the job folder
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Directory to Create Job Folder",
+            "",
+            QFileDialog.Option.ShowDirsOnly,
+        )
+
+        if not directory:
+            return  # User cancelled
+
+        try:
+            customer = job_data.get("Customer", "UnknownCustomer")
+            label_size = job_data.get("Label Size", "UnknownLabelSize")
+            po_num = job_data.get("PO#", "UnknownPO")
+            job_ticket_num = job_data.get("Ticket#", "UnknownTicket")
+
+            # Use current date for folder creation
+            current_date = datetime.now().strftime("%y-%m-%d")
+            job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
+
+            # Create the directory structure: Selected Dir / Customer / Label Size / Job Folder
+            customer_path = os.path.join(directory, customer)
+            label_size_path = os.path.join(customer_path, label_size)
+            job_path = os.path.join(label_size_path, job_folder_name)
+
+            # Create directories if they don't exist
+            os.makedirs(customer_path, exist_ok=True)
+            os.makedirs(label_size_path, exist_ok=True)
+
+            if os.path.exists(job_path):
+                QMessageBox.warning(
+                    self, "Warning", f"Job folder already exists:\n{job_path}"
+                )
                 return
 
-            self.add_job_to_table(job_data)
+            os.makedirs(job_path)
 
-            self.create_checklist_pdf(job_data, job_path)
+            # Get the full job data for creating JSON and PDF
+            full_job_data = self._get_job_data_for_row(selected_row_index.row())
+            if full_job_data:
+                # For folder creation, use the current data from table with proper field mapping
+                folder_job_data = {}
+                for col, header in enumerate(self.headers):
+                    cell_index = self.source_model.index(selected_row_index.row(), col)
+                    cell_value = self.source_model.data(cell_index, Qt.DisplayRole)
 
-            QMessageBox.information(self, "Success", "Job created successfully")
+                    # Map display headers back to data keys for folder creation
+                    if header == "Ticket#":
+                        folder_job_data["Job Ticket#"] = (
+                            cell_value  # Use old key for folder naming
+                        )
+                    elif header == "Qty":
+                        folder_job_data["Quantity"] = (
+                            cell_value  # Use old key for data consistency
+                        )
+                    else:
+                        folder_job_data[header] = cell_value
+
+                # Use current date for folder creation
+                current_date = datetime.now().strftime("%y-%m-%d")
+                customer = folder_job_data.get("Customer", "UnknownCustomer")
+                label_size = folder_job_data.get("Label Size", "UnknownLabelSize")
+                po_num = folder_job_data.get("PO#", "UnknownPO")
+                job_ticket_num = folder_job_data.get("Job Ticket#", "UnknownTicket")
+                job_folder_name = f"{current_date} - {po_num} - {job_ticket_num}"
+
+                # Create the directory structure: Selected Dir / Customer / Label Size / Job Folder
+                customer_path = os.path.join(directory, customer)
+                label_size_path = os.path.join(customer_path, label_size)
+                job_path = os.path.join(label_size_path, job_folder_name)
+
+                # Create directories if they don't exist
+                os.makedirs(customer_path, exist_ok=True)
+                os.makedirs(label_size_path, exist_ok=True)
+
+                if os.path.exists(job_path):
+                    QMessageBox.warning(
+                        self, "Warning", f"Job folder already exists:\n{job_path}"
+                    )
+                    return
+
+                os.makedirs(job_path)
+
+                # Save job data JSON in the new folder (preserve full job data structure)
+                full_job_data["job_folder_path"] = job_path
+                try:
+                    with open(os.path.join(job_path, "job_data.json"), "w") as f:
+                        json.dump(full_job_data, f, indent=4)
+                except IOError as e:
+                    print(f"Could not save job_data.json: {e}")
+
+                # Create checklist PDF
+                self.create_checklist_pdf(full_job_data, job_path)
+
+            QMessageBox.information(
+                self, "Success", f"Job folder created successfully at:\n{job_path}"
+            )
+            print(f"Successfully created job folder: {job_path}")
 
         except Exception as e:
             print(f"Error creating job folder: {e}")
@@ -1247,8 +1124,15 @@ class JobPageWidget(QWidget):
         if not index.isValid():
             return
 
-        row = index.row()
-        job_data = self._get_job_data_for_row(row)
+        # Map the proxy index to source index
+        source_index = self.proxy_model.mapToSource(index)
+        
+        # Get the job data from the first column's UserRole data
+        job_data = self.source_model.item(source_index.row(), 0).data(Qt.ItemDataRole.UserRole)
+
+        if not job_data:
+            QMessageBox.warning(self, "Error", "Could not retrieve job data.")
+            return
 
         # Create and show the job details dialog
         dialog = JobDetailsDialog(job_data, self.base_path, self)
@@ -1256,7 +1140,7 @@ class JobPageWidget(QWidget):
         # Connect signals
         dialog.job_updated.connect(self.update_job_in_table)
         dialog.job_archived.connect(self.handle_job_archived)
-        dialog.job_deleted.connect(lambda: self.delete_job_by_row(row))
+        dialog.job_deleted.connect(lambda: self.delete_job_by_row(source_index.row()))
 
         dialog.exec()
 
@@ -1288,7 +1172,7 @@ class JobPageWidget(QWidget):
                             item = QStandardItem(formatted_value)
                         else:
                             item = QStandardItem(str(updated_job_data[header]))
-                        self.model.setItem(i, col, item)
+                        self.source_model.setItem(i, col, item)
                 break
 
     def handle_job_archived(self, job_data):
@@ -1308,7 +1192,7 @@ class JobPageWidget(QWidget):
         for i, job in enumerate(self.all_jobs):
             if job.get("job_folder_path") == job_data.get("job_folder_path"):
                 self._delete_job_files(job_data)
-                self.model.removeRow(i)
+                self.source_model.removeRow(i)
                 del self.all_jobs[i]
                 break
 
@@ -1317,7 +1201,7 @@ class JobPageWidget(QWidget):
 
     def delete_job_by_row(self, row):
         """Delete job by row index, including all its files."""
-        if 0 <= row < self.model.rowCount():
+        if 0 <= row < self.source_model.rowCount():
             job_data = self._get_job_data_for_row(row)
 
             reply = QMessageBox.question(
@@ -1329,7 +1213,7 @@ class JobPageWidget(QWidget):
 
             if reply == QMessageBox.StandardButton.Yes:
                 self._delete_job_files(job_data)
-                self.model.removeRow(row)
+                self.source_model.removeRow(row)
                 del self.all_jobs[row]
 
                 # Ensure monitoring continues after deletion
@@ -1959,8 +1843,8 @@ class JobPageWidget(QWidget):
 
         job_data = {}
         for col, header in enumerate(self.headers):
-            cell_index = self.model.index(selected_row_index.row(), col)
-            job_data[header] = self.model.data(cell_index, Qt.DisplayRole)
+            cell_index = self.source_model.index(selected_row_index.row(), col)
+            job_data[header] = self.source_model.data(cell_index, Qt.DisplayRole)
 
         # Use default network path for context menu folder creation
         self._create_job_folders(job_data, [self.network_path])
@@ -2154,7 +2038,7 @@ class JobPageWidget(QWidget):
         debug_info = []
         debug_info.append("=== JOB TABLE DEBUG INFO ===")
         debug_info.append(f"Jobs in memory (all_jobs): {len(self.all_jobs)}")
-        debug_info.append(f"Rows in table model: {self.model.rowCount()}")
+        debug_info.append(f"Rows in table model: {self.source_model.rowCount()}")
         debug_info.append(f"Active jobs source dir: {config.ACTIVE_JOBS_SOURCE_DIR}")
         debug_info.append(f"Monitored directories: {len(self.file_watcher.directories())}")
         
