@@ -41,6 +41,7 @@ from src.utils.epc_conversion import (
 )
 from src.utils.roll_tracker import generate_quality_control_sheet
 import re
+from src.utils.template_mapping import get_template_manager
 
 
 class JobLoaderWorker(QObject):
@@ -1468,18 +1469,27 @@ class JobPageWidget(QWidget):
         """Copy .btw template file to the job's print folder."""
         try:
             from src.utils.epc_conversion import get_template_path_with_inlay
+            from src.utils.template_mapping import get_template_manager
             
-            template_base_path = config.get_template_base_path()
+            # First, check template mappings
+            template_manager = get_template_manager()
+            template_path = template_manager.get_template(customer, label_size)
             
-            if not template_base_path or not os.path.exists(template_base_path):
-                print(f"Template base path not configured or doesn't exist: {template_base_path}")
-                return
-            
-            # Get inlay type for better template matching
-            inlay_type = job_data.get("Inlay Type", "")
-            
-            # Use enhanced template lookup with inlay type
-            template_path = get_template_path_with_inlay(template_base_path, customer, label_size, inlay_type)
+            if template_path:
+                print(f"Using mapped template: {template_path}")
+            else:
+                # Fall back to directory scanning
+                template_base_path = config.get_template_base_path()
+                
+                if not template_base_path or not os.path.exists(template_base_path):
+                    print(f"Template base path not configured or doesn't exist: {template_base_path}")
+                    return
+                
+                # Get inlay type for better template matching
+                inlay_type = job_data.get("Inlay Type", "")
+                
+                # Use enhanced template lookup with inlay type
+                template_path = get_template_path_with_inlay(template_base_path, customer, label_size, inlay_type)
             
             if template_path and os.path.exists(template_path):
                 # Determine destination filename priority: UPC > Job Ticket > PO Number

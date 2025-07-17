@@ -890,54 +890,64 @@ class EPCDatabasePage(QWizardPage):
             # Update template status
             if customer and label_size:
                 from src.utils.epc_conversion import get_template_path_with_inlay, list_available_templates
+                from src.utils.template_mapping import get_template_manager
                 
-                # Use enhanced template lookup with inlay type
-                template_path = get_template_path_with_inlay(config.get_template_base_path(), customer, label_size, inlay_type)
+                # First, check template mappings
+                template_manager = get_template_manager()
+                template_path = template_manager.get_template(customer, label_size)
                 
-                if template_path and os.path.exists(template_path):
+                if template_path:
                     template_name = os.path.basename(template_path)
-                    self.template_status_label.setText(f"✓ Template found: {template_name}\nWill be copied to print folder during job creation.")
+                    self.template_status_label.setText(f"✓ Mapped template: {template_name}\nWill be copied to print folder during job creation.")
                     self.template_status_label.setStyleSheet("color: green;")
                 else:
-                    # Show available templates for this label size
-                    available_templates = list_available_templates(config.get_template_base_path())
+                    # Fall back to directory scanning with inlay type
+                    template_path = get_template_path_with_inlay(config.get_template_base_path(), customer, label_size, inlay_type)
                     
-                    if label_size in available_templates:
-                        template_list = available_templates[label_size]
-                        template_names = [os.path.basename(t) for t in template_list[:2]]  # Show first 2
-                        template_display = ", ".join(template_names)
-                        if len(template_list) > 2:
-                            template_display += f" (and {len(template_list) - 2} more)"
-                        
-                        self.template_status_label.setText(f"⚠ Best match not found for {customer} (Inlay: {inlay_type})\nAvailable for {label_size}: {template_display}\nFirst available template will be used.")
-                        self.template_status_label.setStyleSheet("color: orange;")
+                    if template_path and os.path.exists(template_path):
+                        template_name = os.path.basename(template_path)
+                        self.template_status_label.setText(f"✓ Template found: {template_name}\nWill be copied to print folder during job creation.")
+                        self.template_status_label.setStyleSheet("color: green;")
                     else:
-                        # Try to find label size directory with case-insensitive matching
-                        template_base_path = config.get_template_base_path()
-                        found_label_size = None
-                        if template_base_path and os.path.exists(template_base_path):
-                            try:
-                                for item in os.listdir(template_base_path):
-                                    if os.path.isdir(os.path.join(template_base_path, item)):
-                                        if item.lower().replace(' ', '') == label_size.lower().replace(' ', ''):
-                                            found_label_size = item
-                                            break
-                            except Exception:
-                                pass
+                        # Show available templates for this label size
+                        available_templates = list_available_templates(config.get_template_base_path())
                         
-                        if found_label_size and found_label_size in available_templates:
-                            template_list = available_templates[found_label_size]
-                            template_names = [os.path.basename(t) for t in template_list[:2]]
+                        if label_size in available_templates:
+                            template_list = available_templates[label_size]
+                            template_names = [os.path.basename(t) for t in template_list[:2]]  # Show first 2
                             template_display = ", ".join(template_names)
                             if len(template_list) > 2:
                                 template_display += f" (and {len(template_list) - 2} more)"
                             
-                            self.template_status_label.setText(f"⚠ Best match not found for {customer} (Inlay: {inlay_type})\nAvailable for {found_label_size}: {template_display}\nFirst available template will be used.")
+                            self.template_status_label.setText(f"⚠ No mapping or match found for {customer} (Inlay: {inlay_type})\nAvailable for {label_size}: {template_display}\nFirst available template will be used.")
                             self.template_status_label.setStyleSheet("color: orange;")
                         else:
-                            self.template_status_label.setText(f"⚠ No templates found for label size: {label_size}\nJob will be created without template file.")
-                            self.template_status_label.setStyleSheet("color: red;")
-            
+                            # Try to find label size directory with case-insensitive matching
+                            template_base_path = config.get_template_base_path()
+                            found_label_size = None
+                            if template_base_path and os.path.exists(template_base_path):
+                                try:
+                                    for item in os.listdir(template_base_path):
+                                        if os.path.isdir(os.path.join(template_base_path, item)):
+                                            if item.lower() == label_size.lower():
+                                                found_label_size = item
+                                                break
+                                except Exception:
+                                    pass
+                            
+                            if found_label_size and found_label_size in available_templates:
+                                template_list = available_templates[found_label_size]
+                                template_names = [os.path.basename(t) for t in template_list[:2]]
+                                template_display = ", ".join(template_names)
+                                if len(template_list) > 2:
+                                    template_display += f" (and {len(template_list) - 2} more)"
+                                
+                                self.template_status_label.setText(f"⚠ No mapping or match found for {customer} (Inlay: {inlay_type})\nAvailable for {found_label_size}: {template_display}\nFirst available template will be used.")
+                                self.template_status_label.setStyleSheet("color: orange;")
+                            else:
+                                self.template_status_label.setText(f"⚠ No templates found for label size: {label_size}\nJob will be created without template file.")
+                                self.template_status_label.setStyleSheet("color: red;")
+
             # Update serial number information
             self.update_serial_info()
                     

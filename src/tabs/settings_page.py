@@ -73,6 +73,9 @@ class SettingsPageWidget(QWidget):
         self.template_base_path_edit = self.create_directory_setting_row(
             dir_layout, "Template Base Path:", "Base folder containing customer/label_size template structure for EPC generation.", config.TEMPLATE_BASE_PATH
         )
+        self.template_mapping_file_edit = self.create_file_setting_row(
+            dir_layout, "Template Mapping File:", "JSON file containing Customer + Label Size to template file mappings.", config.get_template_mapping_file()
+        )
         self.serial_numbers_path_edit = self.create_directory_setting_row(
             dir_layout, "Serial Numbers Path:", "Base folder for centralized serial number management and logging.", config.SERIAL_NUMBERS_PATH
         )
@@ -99,6 +102,11 @@ class SettingsPageWidget(QWidget):
                                         "Edit the list of label sizes", self.open_label_sizes_manager)
         self.create_data_manager_button(data_layout, "Manage Inlay Types", 
                                         "Edit the list of inlay types", self.open_inlay_types_manager)
+        
+        # Add template mapping button
+        self.create_data_manager_button(data_layout, "Manage Template Mappings", 
+                                        "Map Customer + Label Size combinations to specific template files", 
+                                        self.open_template_mapping_manager)
 
         scroll_layout.addWidget(data_group)
 
@@ -154,6 +162,35 @@ class SettingsPageWidget(QWidget):
         
         return line_edit
 
+    def create_file_setting_row(self, parent_layout, label_text, description_text, current_path):
+        """Create a file setting row (similar to directory but for files)."""
+        container_layout = QVBoxLayout()
+        
+        label = QLabel(label_text)
+        label.setStyleSheet("font-weight: bold; margin-bottom: 5px;")
+        container_layout.addWidget(label)
+        
+        description_label = QLabel(description_text)
+        description_label.setStyleSheet("font-size: 10pt; color: grey; margin-bottom: 8px;")
+        description_label.setWordWrap(True)
+        container_layout.addWidget(description_label)
+        
+        input_layout = QHBoxLayout()
+        line_edit = QLineEdit(current_path)
+        line_edit.setMinimumHeight(32)
+        browse_button = QPushButton("Browse...")
+        browse_button.setFixedWidth(100)
+        browse_button.clicked.connect(lambda: self.browse_for_file(line_edit, label_text))
+        
+        input_layout.addWidget(line_edit)
+        input_layout.addWidget(browse_button)
+        container_layout.addLayout(input_layout)
+        
+        parent_layout.addLayout(container_layout)
+        parent_layout.addSpacing(20)
+        
+        return line_edit
+
     def create_data_manager_button(self, parent_layout, title, description, callback):
         """Create a button that opens a data manager popup."""
         container = QWidget()
@@ -184,6 +221,17 @@ class SettingsPageWidget(QWidget):
         if directory:
             line_edit.setText(directory)
 
+    def browse_for_file(self, line_edit, title):
+        """Open file browser to select a JSON file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Select {title}",
+            line_edit.text(),
+            "JSON Files (*.json);;All Files (*.*)"
+        )
+        if file_path:
+            line_edit.setText(file_path)
+
     def save_directory_settings(self):
         """Save only the directory settings."""
         try:
@@ -203,6 +251,8 @@ class SettingsPageWidget(QWidget):
             config.ACTIVE_JOBS_SOURCE_DIR = self.active_jobs_source_dir_edit.text()
             
             config.save_template_base_path(self.template_base_path_edit.text())
+            
+            config.save_template_mapping_file(self.template_mapping_file_edit.text())
             
             config.save_serial_numbers_path(self.serial_numbers_path_edit.text())
             
@@ -231,6 +281,22 @@ class SettingsPageWidget(QWidget):
     def open_inlay_types_manager(self):
         dialog = TxtFileManagerDialog(self, "Inlay Types", config.INLAY_TYPES_FILE,
                                      "Manage the inlay types that appear in the job wizard dropdown.")
+        dialog.exec()
+
+    def open_template_mapping_manager(self):
+        """Open the template mapping manager dialog."""
+        from src.widgets.template_mapping_dialog import TemplateMappingDialog
+        
+        # Check if mapping file is configured
+        if not config.get_template_mapping_file():
+            QMessageBox.warning(
+                self,
+                "No Mapping File",
+                "Please configure a Template Mapping File first."
+            )
+            return
+        
+        dialog = TemplateMappingDialog(self)
         dialog.exec()
 
 

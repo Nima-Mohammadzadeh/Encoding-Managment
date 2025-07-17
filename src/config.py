@@ -186,3 +186,22 @@ def get_monitoring_settings():
         'debounce_ms': REFRESH_DEBOUNCE_MS,
         'periodic_interval': PERIODIC_REFRESH_INTERVAL
     }
+
+
+# Template configuration
+def save_template_base_path(path):
+    """Save the template base path to settings"""
+    settings.setValue("template_base_path", path)
+
+def get_template_base_path():
+    """Get the template base path from settings"""
+    return settings.value("template_base_path", "", type=str)
+
+# Template mapping file configuration
+def save_template_mapping_file(path):
+    """Save the template mapping file path to settings"""
+    settings.setValue("template_mapping_file", path)
+
+def get_template_mapping_file():
+    """Get the template mapping file path from settings"""
+    return settings.value("template_mapping_file", "", type=str)

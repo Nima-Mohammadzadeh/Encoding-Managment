@@ -1,0 +1,15 @@
+{
+  "Peak Technologies": {
+    "1.85 x 0.91": "Z:\\Templates\\Peak\\peak_small_label.btw",
+    "2.126 x 1.339": "Z:\\Templates\\Peak\\peak_medium_label.btw",
+    "4 x 6": "Z:\\Templates\\Peak\\peak_large_label.btw"
+  },
+  "Smead": {
+    "2 x 1": "Z:\\Templates\\Smead\\smead_standard.btw",
+    "3 x 2": "Z:\\Templates\\Smead\\smead_folder_label.btw"
+  },
+  "Avery": {
+    "1.85 x 0.91": "Z:\\Templates\\Avery\\avery_address_label.btw",
+    "2.625 x 1": "Z:\\Templates\\Avery\\avery_shipping_label.btw"
+  }
+} 
